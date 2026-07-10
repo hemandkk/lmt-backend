@@ -10,7 +10,10 @@ class Settings(BaseSettings):
     ACCESS_TOKEN_EXPIRE_MINUTES: int = Field(
         validation_alias="JWT_EXPIRE_MINUTES"
     )
-
+    REFRESH_TOKEN_EXPIRE_DAYS: int = Field(
+        default=7,
+        validation_alias="JWT_REFRESH_EXPIRE_DAYS"
+    )
     DATABASE_URL: str
     UPLOAD_DIR: str = "app/uploads"
     

@@ -110,7 +110,10 @@ class Payment(TimestampMixin, Base):
 
     transaction_number: Mapped[str | None]
 
-    reference_number: Mapped[str | None]
+    reference_number: Mapped[str | None] = mapped_column(
+        String(100),
+        nullable=True,
+    )
     # Bank/UPI reference number if different from transaction_number
 
     created_by: Mapped[int | None]

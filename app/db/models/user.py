@@ -66,11 +66,11 @@ class User(TimestampMixin, Base):
         DateTime(timezone=True)
     )
 
-    profile = relationship(
+    """ profile = relationship(
         "EmployeeProfile",
         back_populates="user",
         uselist=False
-    )
+    ) """
     prospects = relationship(
         "Prospect",
         back_populates="assigned_to"

@@ -21,6 +21,7 @@ from app.services.auth_service import (
 from app.repositories.user_repository import (
     UserRepository,
 )
+from app.core.security import hash_password
 
 from app.core.security import (
     create_access_token,
@@ -45,7 +46,8 @@ def login(
         payload.username,
         payload.password,
     )
-
+    print("###########")
+    print(result)
     if not result:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -60,7 +62,8 @@ def login(
             "role": user.role.value,
         }
     )
-
+    print("$#$#$#")
+    print(refresh_token)
     return {
         "access_token": access_token,
         "refresh_token": refresh_token,

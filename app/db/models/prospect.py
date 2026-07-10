@@ -13,7 +13,10 @@ from sqlalchemy import (
     Enum,
     func,
 )
-
+from sqlalchemy.orm import (
+    Mapped,
+    mapped_column
+)
 from sqlalchemy.orm import relationship
 
 from app.db.base import Base
@@ -182,4 +185,9 @@ class Prospect(TimestampMixin, Base):
         "ProspectDocument",
         back_populates="prospect",
         cascade="all, delete-orphan",
+    )
+
+    reference_number: Mapped[str | None] = mapped_column(
+        String(100),
+        nullable=True,
     )

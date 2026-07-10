@@ -4,11 +4,11 @@ pip install sqlalchemy
 pip install psycopg[binary]
 pip install alembic
 pip install python-jose[cryptography]
-pip install passlib[bcrypt]
 pip install python-multipart
 pip install pydantic-settings
 pip install email-validator
-
+pip install passlib[bcrypt]==1.7.4
+pip install bcrypt==4.0.1
 //DEV 
 pip install pytest
 pip install httpx
