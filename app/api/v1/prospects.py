@@ -16,13 +16,33 @@ from app.schemas.prospect import (
     ProspectResponse,
     ProspectListResponse,
 )
+from app.db.models.prospect import Prospect
 
 from app.services.prospect_service import ProspectService
-
+from app.core.id_generator import generate_next_code
 router = APIRouter(
     prefix="/prospects",
     tags=["Prospects"],
 )
+
+
+
+# --------------------------------------------------------
+# Next Prospects ID
+# --------------------------------------------------------
+@router.get("/utility/next-prospect-id")
+def get_next_prospect_id(db: Session = Depends(get_db)):
+    prospect_id = generate_next_code(
+                    db=db,
+                    model=Prospect,
+                    field="prospect_id",
+                    prefix="PSP",
+                )
+    print("prospect_id")
+    print(prospect_id)
+    return {
+        "employeeId": prospect_id
+    }
 
 
 # --------------------------------------------------------
