@@ -22,12 +22,14 @@ class PaymentStatus(str, enum.Enum):
     completed = "completed"
     failed = "failed"
 
+
 class PaymentMethod(str, enum.Enum):
     cash = "cash"
     upi = "upi"
     card = "card"
     bank_transfer = "bank_transfer"
     cheque = "cheque"
+
 
 class Payment(TimestampMixin, Base):
     __tablename__ = "payments"
@@ -56,7 +58,7 @@ class Payment(TimestampMixin, Base):
         Enum(PaymentType),
         nullable=False,
     )
-    
+
     payment_method: Mapped[PaymentMethod] = mapped_column(
         Enum(PaymentMethod),
         nullable=False,
@@ -85,6 +87,11 @@ class Payment(TimestampMixin, Base):
         nullable=True,
     )
 
+    reference_number: Mapped[str | None] = mapped_column(
+        String(100),
+        nullable=True,
+    )
+
     notes: Mapped[str | None] = mapped_column(
         Text,
         nullable=True,
@@ -95,7 +102,6 @@ class Payment(TimestampMixin, Base):
         nullable=True,
     )
 
-    # Relationships
     prospect = relationship(
         "Prospect",
         back_populates="payments",
@@ -105,17 +111,3 @@ class Payment(TimestampMixin, Base):
         "User",
         foreign_keys=[created_by],
     )
-
-    receipt_url: Mapped[str | None]
-
-    transaction_number: Mapped[str | None]
-
-    reference_number: Mapped[str | None] = mapped_column(
-        String(100),
-        nullable=True,
-    )
-    # Bank/UPI reference number if different from transaction_number
-
-    created_by: Mapped[int | None]
-
-    notes: Mapped[str |None]

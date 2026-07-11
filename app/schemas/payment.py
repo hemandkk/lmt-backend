@@ -4,7 +4,7 @@ from datetime import date, datetime
 from decimal import Decimal
 from typing import Optional
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.db.models.payment import (
     PaymentMethod,
@@ -23,7 +23,7 @@ class PaymentBase(BaseModel):
 
     payment_type: PaymentType
 
-    payment_method: PaymentMethod
+    payment_method: PaymentMethod = PaymentMethod.cash
 
     payment_status: PaymentStatus = PaymentStatus.completed
 
@@ -40,6 +40,13 @@ class PaymentBase(BaseModel):
     )
 
     notes: Optional[str] = None
+
+    @field_validator("payment_type", mode="before")
+    @classmethod
+    def map_final_to_full(cls, value):
+        if isinstance(value, str) and value.lower() == "final":
+            return PaymentType.full
+        return value
 
 
 # -----------------------------
@@ -68,6 +75,13 @@ class PaymentUpdate(BaseModel):
     reference_number: Optional[str] = None
 
     notes: Optional[str] = None
+
+    @field_validator("payment_type", mode="before")
+    @classmethod
+    def map_final_to_full(cls, value):
+        if isinstance(value, str) and value.lower() == "final":
+            return PaymentType.full
+        return value
 
 
 # -----------------------------

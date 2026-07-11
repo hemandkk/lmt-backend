@@ -1,64 +1,51 @@
 from __future__ import annotations
 
-from datetime import datetime
+from fastapi import UploadFile
+from sqlalchemy.orm import Session
 
-from sqlalchemy.ext.asyncio import AsyncSession
-
+from app.core.file_storage import FileStorage
+from app.core.id_generator import generate_id
 from app.db.models.payment import Payment
+from app.db.models.prospect import Prospect
 from app.repositories.payment_repository import PaymentRepository
 from app.repositories.prospect_repository import ProspectRepository
-from app.schemas.payment import (
-    PaymentCreate,
-    PaymentUpdate,
-)
+from app.schemas.payment import PaymentCreate, PaymentUpdate
 
 
 class PaymentService:
-    def __init__(self, db: AsyncSession):
+    def __init__(self, db: Session):
         self.db = db
         self.payment_repo = PaymentRepository(db)
-        self.prospect_repo = ProspectRepository(db)
 
-    async def _generate_payment_id(self) -> str:
-        """
-        Generates IDs like:
-        PAY000001
-        PAY000002
-        """
-
-        total, _ = await self.payment_repo.list(
-            skip=0,
-            limit=1,
-        )
-
-        return f"PAY{total + 1:06d}"
-
-    async def create_payment(
+    def create_payment(
         self,
         payment_in: PaymentCreate,
         current_user_id: int,
+        receipt_file: UploadFile | None = None,
     ) -> Payment:
-
-        prospect = await self.prospect_repo.get_by_id(
-            payment_in.prospect_id
-        )
-
+        prospect = ProspectRepository.get_by_id(self.db, payment_in.prospect_id)
         if not prospect:
             raise ValueError("Prospect not found.")
 
         if payment_in.transaction_number:
-
-            existing = await self.payment_repo.get_by_transaction_number(
+            existing = self.payment_repo.get_by_transaction_number(
                 payment_in.transaction_number
             )
-
             if existing:
-                raise ValueError(
-                    "Transaction number already exists."
-                )
+                raise ValueError("Transaction number already exists.")
+
+        payment_code = generate_id(self.db, Payment, "payment_id", "PAY")
+        receipt_url = None
+
+        if receipt_file and receipt_file.filename:
+            receipt_url, _, _ = FileStorage.save_file(
+                upload_file=receipt_file,
+                folder=f"prospects/{prospect.prospect_id}/receipts",
+                filename=payment_code,
+            )
 
         payment = Payment(
-            payment_id=await self._generate_payment_id(),
+            payment_id=payment_code,
             prospect_id=payment_in.prospect_id,
             amount=payment_in.amount,
             payment_type=payment_in.payment_type,
@@ -68,113 +55,70 @@ class PaymentService:
             transaction_number=payment_in.transaction_number,
             reference_number=payment_in.reference_number,
             notes=payment_in.notes,
+            receipt_url=receipt_url,
             created_by=current_user_id,
         )
+        return self.payment_repo.create(payment)
 
-        return await self.payment_repo.create(
-            payment=payment
-        )
+    def get_payment(self, payment_id: int) -> Payment | None:
+        return self.payment_repo.get_by_id(payment_id)
 
-    async def get_payment(
-        self,
-        payment_id: int,
-    ) -> Payment | None:
+    def list_payments(self, skip: int = 0, limit: int = 20):
+        return self.payment_repo.list(skip=skip, limit=limit)
 
-        return await self.payment_repo.get_by_id(
-            payment_id
-        )
+    def get_payments_by_prospect(self, prospect_id: int):
+        return self.payment_repo.get_by_prospect(prospect_id)
 
-    async def get_payment_by_code(
-        self,
-        payment_code: str,
-    ) -> Payment | None:
-
-        return await self.payment_repo.get_by_payment_id(
-            payment_code
-        )
-
-    async def list_payments(
-        self,
-        skip: int = 0,
-        limit: int = 20,
-    ):
-
-        return await self.payment_repo.list(
-            skip=skip,
-            limit=limit,
-        )
-
-    async def get_payments_by_prospect(
-        self,
-        prospect_id: int,
-    ):
-
-        return await self.payment_repo.get_by_prospect(
-            prospect_id
-        )
-
-    async def update_payment(
-        self,
-        payment_id: int,
-        payment_in: PaymentUpdate,
+    def update_payment(
+        self, payment_id: int, payment_in: PaymentUpdate
     ) -> Payment:
-
-        payment = await self.payment_repo.get_by_id(
-            payment_id
-        )
-
+        payment = self.payment_repo.get_by_id(payment_id)
         if not payment:
             raise ValueError("Payment not found.")
 
         if payment_in.transaction_number:
-
-            existing = await self.payment_repo.get_by_transaction_number(
+            existing = self.payment_repo.get_by_transaction_number(
                 payment_in.transaction_number
             )
+            if existing and existing.id != payment.id:
+                raise ValueError("Transaction number already exists.")
 
-            if (
-                existing
-                and existing.id != payment.id
-            ):
-                raise ValueError(
-                    "Transaction number already exists."
-                )
+        return self.payment_repo.update(payment, payment_in)
 
-        return await self.payment_repo.update(
-            payment,
-            payment_in,
-        )
-
-    async def upload_receipt(
-        self,
-        payment_id: int,
-        receipt_url: str,
+    def upload_receipt(
+        self, payment_id: int, file: UploadFile
     ) -> Payment:
-
-        payment = await self.payment_repo.get_by_id(
-            payment_id
-        )
-
+        payment = self.payment_repo.get_by_id(payment_id)
         if not payment:
             raise ValueError("Payment not found.")
 
-        return await self.payment_repo.update_receipt(
-            payment,
-            receipt_url,
+        prospect = ProspectRepository.get_by_id(self.db, payment.prospect_id)
+        folder = (
+            f"prospects/{prospect.prospect_id}/receipts"
+            if prospect
+            else "payments"
         )
 
-    async def delete_payment(
-        self,
-        payment_id: int,
-    ) -> None:
+        if payment.receipt_url:
+            receipt_url, _, _ = FileStorage.replace_file(
+                old_file=payment.receipt_url,
+                upload_file=file,
+                folder=folder,
+                filename=payment.payment_id,
+            )
+        else:
+            receipt_url, _, _ = FileStorage.save_file(
+                upload_file=file,
+                folder=folder,
+                filename=payment.payment_id,
+            )
 
-        payment = await self.payment_repo.get_by_id(
-            payment_id
-        )
+        return self.payment_repo.update_receipt(payment, receipt_url)
 
+    def delete_payment(self, payment_id: int) -> None:
+        payment = self.payment_repo.get_by_id(payment_id)
         if not payment:
             raise ValueError("Payment not found.")
-
-        await self.payment_repo.delete(
-            payment
-        )
+        if payment.receipt_url:
+            FileStorage.delete_file(payment.receipt_url)
+        self.payment_repo.delete(payment)

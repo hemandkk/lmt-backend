@@ -1,32 +1,265 @@
 from math import ceil
-from typing import Optional
+from typing import Any, Optional
 
+from fastapi import UploadFile
 from sqlalchemy.orm import Session
 
-from app.core.id_generator import generate_id
+from app.core.file_storage import FileStorage
+from app.core.id_generator import generate_id, generate_next_code
 from app.db.models.payment import Payment, PaymentMethod, PaymentStatus
 from app.db.models.prospect import Prospect, ProspectStage
+from app.db.models.prospect_document import DocumentType, ProspectDocument
 from app.repositories.prospect_repository import ProspectRepository
-from app.schemas.prospect import ProspectCreate, ProspectUpdate
+from app.schemas.prospect import (
+    LeadDocumentInput,
+    LeadPaymentInput,
+    ProspectCreate,
+    ProspectUpdate,
+)
 from app.services.notification_service import ActivityLogService, NotificationService
 
 
 class ProspectService:
+
+    # ------------------------------------------------------------------
+    # Helpers
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _resolve_prospect_code(
+        db: Session,
+        requested: Optional[str],
+    ) -> str:
+        if requested:
+            existing = ProspectRepository.get_by_prospect_id(db, requested)
+            if existing:
+                raise ValueError(f"Prospect ID {requested} already exists.")
+            return requested
+        return generate_next_code(db, Prospect, "prospect_id", "PRO")
+
+    @staticmethod
+    def _build_payment(
+        db: Session,
+        payment_in: LeadPaymentInput,
+        receipt_file: Optional[UploadFile] = None,
+        prospect_code: Optional[str] = None,
+    ) -> Payment:
+        receipt_url = payment_in.receipt_url
+        payment_code = generate_id(db, Payment, "payment_id", "PAY")
+
+        if receipt_file and receipt_file.filename:
+            folder = f"prospects/{prospect_code or 'temp'}/receipts"
+            receipt_url, _, _ = FileStorage.save_file(
+                upload_file=receipt_file,
+                folder=folder,
+                filename=payment_code,
+            )
+
+        return Payment(
+            payment_id=payment_code,
+            amount=payment_in.amount,
+            payment_type=payment_in.payment_type,
+            payment_method=payment_in.payment_method or PaymentMethod.cash,
+            payment_status=payment_in.payment_status or PaymentStatus.completed,
+            payment_date=payment_in.payment_date,
+            notes=payment_in.notes,
+            receipt_url=receipt_url,
+            transaction_number=payment_in.transaction_number,
+            reference_number=payment_in.reference_number,
+        )
+
+    @staticmethod
+    def _save_document(
+        db: Session,
+        prospect: Prospect,
+        doc_type: DocumentType,
+        file: UploadFile,
+        remarks: Optional[str] = None,
+        existing: Optional[ProspectDocument] = None,
+    ) -> ProspectDocument:
+        document_code = (
+            existing.document_id
+            if existing
+            else generate_id(db, ProspectDocument, "document_id", "DOC")
+        )
+
+        if existing and existing.file_url:
+            file_url, stored_filename, file_size = FileStorage.replace_file(
+                old_file=existing.file_url,
+                upload_file=file,
+                folder=f"prospects/{prospect.prospect_id}",
+                filename=document_code,
+            )
+            existing.document_type = doc_type
+            existing.original_filename = file.filename or existing.original_filename
+            existing.stored_filename = stored_filename
+            existing.file_url = file_url
+            existing.mime_type = file.content_type
+            existing.file_size = file_size
+            if remarks is not None:
+                existing.remarks = remarks
+            return existing
+
+        file_url, stored_filename, file_size = FileStorage.save_file(
+            upload_file=file,
+            folder=f"prospects/{prospect.prospect_id}",
+            filename=document_code,
+        )
+
+        return ProspectDocument(
+            document_id=document_code,
+            prospect_id=prospect.id,
+            document_type=doc_type,
+            original_filename=file.filename or "document",
+            stored_filename=stored_filename,
+            file_url=file_url,
+            mime_type=file.content_type,
+            file_size=file_size,
+            remarks=remarks,
+            verified=False,
+        )
+
+    @staticmethod
+    def _apply_documents(
+        db: Session,
+        prospect: Prospect,
+        documents_meta: list[LeadDocumentInput],
+        document_files: dict[str, UploadFile],
+    ) -> None:
+        """
+        document_files keys: doc type value e.g. "aadhaar", "photo".
+        """
+        existing_by_type = {
+            (
+                d.document_type.value
+                if hasattr(d.document_type, "value")
+                else str(d.document_type)
+            ): d
+            for d in (prospect.documents or [])
+        }
+
+        for meta in documents_meta or []:
+            doc_type = meta.doc_type
+            key = doc_type.value if hasattr(doc_type, "value") else str(doc_type)
+            upload = document_files.get(key)
+
+            if not upload or not upload.filename:
+                # Keep existing document referenced by existingUrl / id
+                continue
+
+            existing = existing_by_type.get(key)
+            saved = ProspectService._save_document(
+                db,
+                prospect,
+                doc_type,
+                upload,
+                existing=existing,
+            )
+            if existing is None:
+                prospect.documents.append(saved)
+                existing_by_type[key] = saved
+
+        # Files sent without metadata entry still upload
+        for key, upload in document_files.items():
+            if not upload or not upload.filename:
+                continue
+            if any(
+                (m.doc_type.value if hasattr(m.doc_type, "value") else str(m.doc_type))
+                == key
+                for m in (documents_meta or [])
+            ):
+                continue
+            try:
+                doc_type = DocumentType(key)
+            except ValueError:
+                continue
+            existing = existing_by_type.get(key)
+            saved = ProspectService._save_document(
+                db, prospect, doc_type, upload, existing=existing
+            )
+            if existing is None:
+                prospect.documents.append(saved)
+
+    @staticmethod
+    def _sync_payments(
+        db: Session,
+        prospect: Prospect,
+        payments: list[LeadPaymentInput],
+        receipt_files: dict[int, UploadFile],
+        replace: bool = True,
+    ) -> None:
+        existing_by_id = {p.id: p for p in (prospect.payments or [])}
+        kept_ids: set[int] = set()
+
+        for index, payment_in in enumerate(payments or []):
+            receipt = receipt_files.get(index)
+            if payment_in.id and payment_in.id in existing_by_id:
+                payment = existing_by_id[payment_in.id]
+                payment.amount = payment_in.amount
+                payment.payment_type = payment_in.payment_type
+                payment.payment_date = payment_in.payment_date
+                payment.notes = payment_in.notes
+                payment.payment_method = (
+                    payment_in.payment_method or payment.payment_method
+                )
+                payment.payment_status = (
+                    payment_in.payment_status or payment.payment_status
+                )
+                payment.transaction_number = payment_in.transaction_number
+                payment.reference_number = payment_in.reference_number
+                if payment_in.receipt_url is not None and not receipt:
+                    payment.receipt_url = payment_in.receipt_url
+                if receipt and receipt.filename:
+                    url, _, _ = FileStorage.save_file(
+                        upload_file=receipt,
+                        folder=f"prospects/{prospect.prospect_id}/receipts",
+                        filename=payment.payment_id,
+                    )
+                    payment.receipt_url = url
+                kept_ids.add(payment.id)
+            else:
+                new_payment = ProspectService._build_payment(
+                    db,
+                    payment_in,
+                    receipt_file=receipt,
+                    prospect_code=prospect.prospect_id,
+                )
+                new_payment.prospect_id = prospect.id
+                prospect.payments.append(new_payment)
+
+        if replace:
+            for payment in list(prospect.payments):
+                if payment.id and payment.id not in kept_ids:
+                    # Only delete previously persisted rows not in payload
+                    if payment.id in existing_by_id:
+                        if payment.receipt_url:
+                            FileStorage.delete_file(payment.receipt_url)
+                        prospect.payments.remove(payment)
+                        db.delete(payment)
+
+    # ------------------------------------------------------------------
+    # CRUD
+    # ------------------------------------------------------------------
 
     @staticmethod
     def create(
         db: Session,
         payload: ProspectCreate,
         actor_id: Optional[int] = None,
+        document_files: Optional[dict[str, UploadFile]] = None,
+        receipt_files: Optional[dict[int, UploadFile]] = None,
     ) -> Prospect:
-
         if payload.email:
             existing = ProspectRepository.get_by_email(db, payload.email)
             if existing:
                 raise ValueError("Email already exists.")
 
+        prospect_code = ProspectService._resolve_prospect_code(
+            db, payload.prospect_id
+        )
+
         prospect = Prospect(
-            prospect_id=generate_id(db, Prospect, "prospect_id", "PRO"),
+            prospect_id=prospect_code,
             name=payload.name,
             password=payload.password,
             email=payload.email,
@@ -44,22 +277,31 @@ class ProspectService:
             assigned_to_id=payload.assigned_to_id,
             source=payload.source,
             follow_up_date=payload.follow_up_date,
+            stage=payload.stage or ProspectStage.new,
         )
 
-        for payment in payload.payments:
-            payment_data = {
-                "payment_id": generate_id(db, Payment, "payment_id", "PAY"),
-                "amount": payment.amount,
-                "payment_type": payment.payment_type,
-                "payment_date": payment.payment_date,
-                "notes": payment.notes,
-                "receipt_url": payment.receipt_url,
-                "payment_method": PaymentMethod.cash,
-                "payment_status": PaymentStatus.completed,
-            }
-            prospect.payments.append(Payment(**payment_data))
+        receipt_files = receipt_files or {}
+        for index, payment_in in enumerate(payload.payments or []):
+            prospect.payments.append(
+                ProspectService._build_payment(
+                    db,
+                    payment_in,
+                    receipt_file=receipt_files.get(index),
+                    prospect_code=prospect_code,
+                )
+            )
 
         created = ProspectRepository.create(db, prospect)
+
+        # Documents need prospect.id; attach after initial create
+        if payload.documents or document_files:
+            ProspectService._apply_documents(
+                db,
+                created,
+                payload.documents or [],
+                document_files or {},
+            )
+            created = ProspectRepository.update(db, created)
 
         ActivityLogService.log(
             db,
@@ -76,7 +318,7 @@ class ProspectService:
                 db, created, actor_id=actor_id
             )
 
-        return created
+        return ProspectRepository.get_by_id(db, created.id)
 
     @staticmethod
     def list(
@@ -110,6 +352,8 @@ class ProspectService:
         prospect_id: int,
         payload: ProspectUpdate,
         actor_id: Optional[int] = None,
+        document_files: Optional[dict[str, UploadFile]] = None,
+        receipt_files: Optional[dict[int, UploadFile]] = None,
     ):
         prospect = ProspectRepository.get_by_id(db, prospect_id)
         if not prospect:
@@ -122,9 +366,29 @@ class ProspectService:
             else str(prospect.stage)
         )
 
-        data = payload.model_dump(exclude_unset=True)
+        data = payload.model_dump(
+            exclude_unset=True,
+            exclude={"payments", "documents", "replace_payments"},
+        )
         for key, value in data.items():
             setattr(prospect, key, value)
+
+        if payload.payments is not None:
+            ProspectService._sync_payments(
+                db,
+                prospect,
+                payload.payments,
+                receipt_files or {},
+                replace=payload.replace_payments,
+            )
+
+        if payload.documents is not None or document_files:
+            ProspectService._apply_documents(
+                db,
+                prospect,
+                payload.documents or [],
+                document_files or {},
+            )
 
         updated = ProspectRepository.update(db, prospect)
 
@@ -170,6 +434,12 @@ class ProspectService:
         if not prospect:
             raise ValueError("Prospect not found.")
 
+        for document in list(prospect.documents or []):
+            FileStorage.delete_file(document.file_url)
+        for payment in list(prospect.payments or []):
+            if payment.receipt_url:
+                FileStorage.delete_file(payment.receipt_url)
+
         ActivityLogService.log(
             db,
             action="lead_deleted",
@@ -186,7 +456,7 @@ class ProspectService:
     def change_stage(
         db: Session,
         prospect_id: int,
-        stage,
+        stage: Any,
         actor_id: Optional[int] = None,
     ):
         prospect = ProspectRepository.get_by_id(db, prospect_id)
@@ -222,6 +492,7 @@ class ProspectService:
             )
 
         return updated
+
     @staticmethod
     def update_exam(
         db: Session,

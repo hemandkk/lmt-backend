@@ -1,7 +1,7 @@
 from typing import Optional
 
 from sqlalchemy import func
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload, selectinload
 
 from app.db.models.prospect import Prospect
 
@@ -9,49 +9,42 @@ from app.db.models.prospect import Prospect
 class ProspectRepository:
 
     @staticmethod
-    def create(
-        db: Session,
-        prospect: Prospect,
-    ) -> Prospect:
-
-        db.add(prospect)
-        db.commit()
-        db.refresh(prospect)
-
-        return prospect
+    def _with_relations():
+        return (
+            selectinload(Prospect.payments),
+            selectinload(Prospect.documents),
+            joinedload(Prospect.assigned_to),
+            joinedload(Prospect.course),
+        )
 
     @staticmethod
-    def get_by_id(
-        db: Session,
-        prospect_id: int,
-    ) -> Optional[Prospect]:
+    def create(db: Session, prospect: Prospect) -> Prospect:
+        db.add(prospect)
+        db.commit()
+        return ProspectRepository.get_by_id(db, prospect.id)
 
+    @staticmethod
+    def get_by_id(db: Session, prospect_id: int) -> Optional[Prospect]:
         return (
             db.query(Prospect)
+            .options(*ProspectRepository._with_relations())
             .filter(Prospect.id == prospect_id)
             .first()
         )
 
     @staticmethod
     def get_by_prospect_id(
-        db: Session,
-        prospect_code: str,
+        db: Session, prospect_code: str
     ) -> Optional[Prospect]:
-
         return (
             db.query(Prospect)
-            .filter(
-                Prospect.prospect_id == prospect_code
-            )
+            .options(*ProspectRepository._with_relations())
+            .filter(Prospect.prospect_id == prospect_code)
             .first()
         )
 
     @staticmethod
-    def get_by_email(
-        db: Session,
-        email: str,
-    ) -> Optional[Prospect]:
-
+    def get_by_email(db: Session, email: str) -> Optional[Prospect]:
         return (
             db.query(Prospect)
             .filter(Prospect.email == email)
@@ -66,70 +59,41 @@ class ProspectRepository:
         search: str | None = None,
         stage: str | None = None,
     ):
-
-        query = db.query(Prospect)
+        query = db.query(Prospect).options(
+            *ProspectRepository._with_relations()
+        )
 
         if search:
-
-            search = f"%{search}%"
-
+            pattern = f"%{search}%"
             query = query.filter(
-                (Prospect.name.ilike(search))
-                |
-                (Prospect.email.ilike(search))
-                |
-                (Prospect.phone.ilike(search))
+                (Prospect.name.ilike(pattern))
+                | (Prospect.email.ilike(pattern))
+                | (Prospect.phone.ilike(pattern))
+                | (Prospect.prospect_id.ilike(pattern))
             )
 
         if stage:
-            query = query.filter(
-                Prospect.stage == stage
-            )
+            query = query.filter(Prospect.stage == stage)
 
         total = query.count()
-
         items = (
-            query
-            .order_by(
-                Prospect.created_at.desc()
-            )
-            .offset(
-                (page - 1) * page_size
-            )
+            query.order_by(Prospect.created_at.desc())
+            .offset((page - 1) * page_size)
             .limit(page_size)
             .all()
         )
-
         return items, total
 
     @staticmethod
-    def update(
-        db: Session,
-        prospect: Prospect,
-    ) -> Prospect:
-
+    def update(db: Session, prospect: Prospect) -> Prospect:
         db.commit()
-        db.refresh(prospect)
-
-        return prospect
+        return ProspectRepository.get_by_id(db, prospect.id)
 
     @staticmethod
-    def delete(
-        db: Session,
-        prospect: Prospect,
-    ):
-
+    def delete(db: Session, prospect: Prospect) -> None:
         db.delete(prospect)
         db.commit()
 
     @staticmethod
-    def total_count(
-        db: Session,
-    ) -> int:
-
-        return (
-            db.query(
-                func.count(Prospect.id)
-            )
-            .scalar()
-        )
+    def total_count(db: Session) -> int:
+        return db.query(func.count(Prospect.id)).scalar() or 0
