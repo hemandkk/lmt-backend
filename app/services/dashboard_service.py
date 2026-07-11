@@ -75,6 +75,8 @@ def _metrics_for_scope(
         "target_achieved": target["target_achieved"],
         "monthly_target": target["monthly_target"],
         "target_status": target["target_status"],
+        "target_assigned": target.get("target_assigned", False),
+        "target_source": target.get("target_source", "default"),
         "incentive": IncentiveStatusSummary(**incentive),
         "exam_stats": ExamStatsSummary(**exam),
         "total_leads": lead_counts["total"],
@@ -135,6 +137,12 @@ def _enrich_performance(
                 ),
                 target_status=(
                     metrics["target_status"] if metrics else "not_started"
+                ),
+                target_assigned=(
+                    metrics["target_assigned"] if metrics else False
+                ),
+                target_source=(
+                    metrics["target_source"] if metrics else "default"
                 ),
                 incentive_amount=(
                     metrics["incentive"].amount if metrics else Decimal("0")
@@ -416,6 +424,8 @@ class ReportService:
                 target_achieved=p.target_achieved,
                 monthly_target=p.monthly_target,
                 target_status=p.target_status,
+                target_assigned=p.target_assigned,
+                target_source=p.target_source,
                 incentive_amount=p.incentive_amount,
             )
             for p in enriched

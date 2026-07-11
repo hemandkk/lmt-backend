@@ -10,6 +10,7 @@ from app.api.v1.payments import router as payment_router
 from app.core.security import hash_password
 from app.db.base import Base
 from app.db.models.activity_log import ActivityLog
+from app.db.models.app_setting import AppSetting
 from app.db.models.course import Course
 from app.db.models.incentive_slab import IncentiveSlab
 from app.db.models.notification import Notification
@@ -18,6 +19,10 @@ from app.db.models.prospect import Prospect
 from app.db.models.prospect_document import ProspectDocument
 from app.db.models.user import User, UserRole
 from app.db.session import SessionLocal, engine
+from app.repositories.settings_repository import (
+    FALLBACK_DEFAULT_TARGET,
+    SettingsRepository,
+)
 
 UPLOAD_DIR = Path("app/uploads")
 UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
@@ -62,13 +67,25 @@ def ensure_schema_updates() -> None:
         if "users" in tables:
             user_cols = {col["name"] for col in inspector.get_columns("users")}
             if "monthly_sales_target" not in user_cols:
+                # NULL = not assigned → master default applies
                 conn.execute(
                     text(
                         "ALTER TABLE users "
                         "ADD COLUMN monthly_sales_target NUMERIC(12, 2) "
-                        "DEFAULT 100000"
+                        "DEFAULT NULL"
                     )
                 )
+            else:
+                # Drop server default so new employees inherit master default
+                try:
+                    conn.execute(
+                        text(
+                            "ALTER TABLE users "
+                            "ALTER COLUMN monthly_sales_target DROP DEFAULT"
+                        )
+                    )
+                except Exception:
+                    pass
 
 
 def seed_default_incentive_slabs() -> None:
@@ -97,8 +114,23 @@ def seed_default_incentive_slabs() -> None:
         db.close()
 
 
+def seed_default_sales_target() -> None:
+    """Ensure master default monthly sales target exists."""
+    from app.db.models.app_setting import DEFAULT_MONTHLY_SALES_TARGET
+
+    db = SessionLocal()
+    try:
+        if SettingsRepository.get(db, DEFAULT_MONTHLY_SALES_TARGET) is None:
+            SettingsRepository.set_default_monthly_sales_target(
+                db, FALLBACK_DEFAULT_TARGET
+            )
+    finally:
+        db.close()
+
+
 ensure_schema_updates()
 seed_default_incentive_slabs()
+seed_default_sales_target()
 
 app = FastAPI(
     title="LMT API",

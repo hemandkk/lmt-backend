@@ -61,7 +61,7 @@ class User(TimestampMixin, Base):
     monthly_sales_target = Column(
         Numeric(12, 2),
         nullable=True,
-        default=100000,
+        default=None,
     )
 
     last_login = Column(

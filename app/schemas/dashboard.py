@@ -105,6 +105,12 @@ class DashboardMetricsMixin(BaseModel):
     target_status: str = Field(
         default="not_started", serialization_alias="targetStatus"
     )
+    target_assigned: bool = Field(
+        default=False, serialization_alias="targetAssigned"
+    )
+    target_source: str = Field(
+        default="default", serialization_alias="targetSource"
+    )
     incentive: IncentiveStatusSummary = Field(
         default_factory=IncentiveStatusSummary
     )
@@ -151,6 +157,12 @@ class EmployeePerformanceItem(BaseModel):
     )
     target_status: str = Field(
         default="not_started", serialization_alias="targetStatus"
+    )
+    target_assigned: bool = Field(
+        default=False, serialization_alias="targetAssigned"
+    )
+    target_source: str = Field(
+        default="default", serialization_alias="targetSource"
     )
     incentive_amount: Decimal = Field(
         default=Decimal("0"), serialization_alias="incentiveAmount"
@@ -242,6 +254,12 @@ class SalesByEmployeeItem(BaseModel):
     )
     target_status: str = Field(
         default="not_started", serialization_alias="targetStatus"
+    )
+    target_assigned: bool = Field(
+        default=False, serialization_alias="targetAssigned"
+    )
+    target_source: str = Field(
+        default="default", serialization_alias="targetSource"
     )
     incentive_amount: Decimal = Field(
         default=Decimal("0"), serialization_alias="incentiveAmount"

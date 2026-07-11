@@ -6,6 +6,7 @@ from app.db.models.prospect_document import ProspectDocument
 from app.db.models.course import Course
 from app.db.models.notification import Notification
 from app.db.models.activity_log import ActivityLog
+from app.db.models.app_setting import AppSetting
 
 __all__ = [
     "User",
@@ -16,4 +17,5 @@ __all__ = [
     "Course",
     "Notification",
     "ActivityLog",
+    "AppSetting",
 ]

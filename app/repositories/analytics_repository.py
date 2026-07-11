@@ -548,14 +548,16 @@ class AnalyticsRepository:
         from calendar import monthrange
 
         from app.db.models.user import User, UserRole
+        from app.services.master_service import resolve_employee_monthly_target
+        from app.repositories.settings_repository import SettingsRepository
+
+        target_assigned = False
+        target_source = "default"
 
         if employee_id is not None:
             user = db.query(User).filter(User.id == employee_id).first()
-            target = Decimal(
-                str(
-                    (user.monthly_sales_target if user else None)
-                    or Decimal("100000")
-                )
+            target, target_assigned, target_source = (
+                resolve_employee_monthly_target(db, user)
             )
         else:
             employees = (
@@ -563,15 +565,20 @@ class AnalyticsRepository:
                 .filter(User.role == UserRole.employee, User.is_active.is_(True))
                 .all()
             )
-            target = sum(
-                (
-                    Decimal(str(u.monthly_sales_target or 100000))
-                    for u in employees
-                ),
-                Decimal("0"),
-            )
-            if not employees:
-                target = Decimal("100000")
+            if employees:
+                target = Decimal("0")
+                any_assigned = False
+                for user in employees:
+                    effective, assigned, _ = resolve_employee_monthly_target(
+                        db, user
+                    )
+                    target += effective
+                    if assigned:
+                        any_assigned = True
+                target_assigned = any_assigned
+                target_source = "mixed" if any_assigned else "default"
+            else:
+                target = SettingsRepository.get_default_monthly_sales_target(db)
 
         if achieved is None:
             current = today()
@@ -598,6 +605,8 @@ class AnalyticsRepository:
             "target_achieved": achieved,
             "monthly_target": target,
             "target_status": status,
+            "target_assigned": target_assigned,
+            "target_source": target_source,
         }
 
     @staticmethod
