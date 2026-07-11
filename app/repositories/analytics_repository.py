@@ -13,7 +13,7 @@ from app.core.date_utils import (
     start_of_week,
     today,
 )
-from app.db.models.payment import Payment, PaymentStatus, PaymentType
+from app.db.models.payment import Payment, PaymentStatus
 from app.db.models.prospect import Prospect, ProspectStage
 from app.db.models.user import User, UserRole
 
@@ -130,6 +130,12 @@ class AnalyticsRepository:
         db: Session,
         employee_id: Optional[int] = None,
     ) -> dict:
+        """
+        Bucket leads by paid / estimated_deal_value ratio (mutually exclusive):
+        - advanced_paid: 0 < paid < 50% of deal (includes advance/installment partials)
+        - fifty_percent_paid: 50% <= paid < 100%
+        - hundred_percent_paid: paid >= 100% (or paid > 0 when deal value is 0)
+        """
         paid_sq = AnalyticsRepository._paid_amount_subquery(db)
 
         base = (
@@ -144,32 +150,19 @@ class AnalyticsRepository:
         if employee_id is not None:
             base = base.filter(Prospect.assigned_to_id == employee_id)
 
-        rows = base.all()
-
         advanced_paid = 0
         fifty_percent = 0
         hundred_percent = 0
 
-        # Advance-type completed payments count as "advanced paid" leads
-        advance_q = (
-            db.query(func.count(func.distinct(Payment.prospect_id)))
-            .join(Prospect, Prospect.id == Payment.prospect_id)
-            .filter(
-                Payment.payment_status == PaymentStatus.completed,
-                Payment.payment_type == PaymentType.advance,
-            )
-        )
-        if employee_id is not None:
-            advance_q = advance_q.filter(Prospect.assigned_to_id == employee_id)
-        advanced_paid = advance_q.scalar() or 0
+        for row in base.all():
+            deal = Decimal(str(row.estimated_deal_value or 0))
+            paid = Decimal(str(row.paid_amount or 0))
 
-        for row in rows:
-            deal = Decimal(row.estimated_deal_value or 0)
-            paid = Decimal(row.paid_amount or 0)
+            if paid <= 0:
+                continue
 
             if deal <= 0:
-                if paid > 0:
-                    hundred_percent += 1
+                hundred_percent += 1
                 continue
 
             ratio = paid / deal
@@ -177,9 +170,11 @@ class AnalyticsRepository:
                 hundred_percent += 1
             elif ratio >= Decimal("0.5"):
                 fifty_percent += 1
+            else:
+                advanced_paid += 1
 
         return {
-            "advanced_paid": int(advanced_paid),
+            "advanced_paid": advanced_paid,
             "fifty_percent_paid": fifty_percent,
             "hundred_percent_paid": hundred_percent,
         }
@@ -530,6 +525,187 @@ class AnalyticsRepository:
         activity_count = query.scalar() or 0
         stage_count = prospect_q.scalar() or 0
         return int(activity_count) + int(stage_count)
+
+    @staticmethod
+    def exam_stats(
+        db: Session,
+        employee_id: Optional[int] = None,
+    ) -> dict:
+        query = db.query(Prospect)
+        if employee_id is not None:
+            query = query.filter(Prospect.assigned_to_id == employee_id)
+
+        attended = query.filter(Prospect.exam_attended.is_(True)).count()
+        certified = query.filter(Prospect.exam_certified.is_(True)).count()
+        return {"attended": int(attended), "certified": int(certified)}
+
+    @staticmethod
+    def sales_target_summary(
+        db: Session,
+        employee_id: Optional[int] = None,
+        achieved: Optional[Decimal] = None,
+    ) -> dict:
+        from calendar import monthrange
+
+        from app.db.models.user import User, UserRole
+
+        if employee_id is not None:
+            user = db.query(User).filter(User.id == employee_id).first()
+            target = Decimal(
+                str(
+                    (user.monthly_sales_target if user else None)
+                    or Decimal("100000")
+                )
+            )
+        else:
+            employees = (
+                db.query(User)
+                .filter(User.role == UserRole.employee, User.is_active.is_(True))
+                .all()
+            )
+            target = sum(
+                (
+                    Decimal(str(u.monthly_sales_target or 100000))
+                    for u in employees
+                ),
+                Decimal("0"),
+            )
+            if not employees:
+                target = Decimal("100000")
+
+        if achieved is None:
+            current = today()
+            achieved = AnalyticsRepository.payment_collected(
+                db,
+                employee_id=employee_id,
+                date_from=start_of_month(current),
+                date_to=end_of_month(current),
+            )
+        achieved = Decimal(str(achieved or 0))
+
+        if achieved <= 0:
+            status = "not_started"
+        elif target <= 0 or achieved >= target:
+            status = "achieved"
+        else:
+            current = today()
+            days_in_month = monthrange(current.year, current.month)[1]
+            expected_ratio = Decimal(current.day) / Decimal(days_in_month)
+            actual_ratio = achieved / target
+            status = "on_track" if actual_ratio >= expected_ratio else "behind"
+
+        return {
+            "target_achieved": achieved,
+            "monthly_target": target,
+            "target_status": status,
+        }
+
+    @staticmethod
+    def list_active_employees(
+        db: Session,
+        employee_id: Optional[int] = None,
+    ):
+        from app.db.models.user import User, UserRole
+
+        query = db.query(User).filter(
+            User.role == UserRole.employee,
+            User.is_active.is_(True),
+        )
+        if employee_id is not None:
+            query = query.filter(User.id == employee_id)
+        return query.order_by(User.name.asc()).all()
+
+    @staticmethod
+    def incentive_status(
+        db: Session,
+        employee_id: Optional[int] = None,
+        collection: Optional[Decimal] = None,
+    ) -> dict:
+        from app.repositories.incentive_repository import IncentiveRepository
+
+        if collection is None:
+            current = today()
+            collection = AnalyticsRepository.payment_collected(
+                db,
+                employee_id=employee_id,
+                date_from=start_of_month(current),
+                date_to=end_of_month(current),
+            )
+        collection = Decimal(str(collection or 0))
+
+        slabs = IncentiveRepository.get_all(db)
+        current_slab = None
+        next_slab = None
+
+        for index, slab in enumerate(slabs):
+            min_amount = Decimal(str(slab.min_amount or 0))
+            max_amount = (
+                Decimal(str(slab.max_amount))
+                if slab.max_amount is not None
+                else None
+            )
+            in_range = collection >= min_amount and (
+                max_amount is None or collection <= max_amount
+            )
+            if in_range:
+                current_slab = slab
+                next_slab = slabs[index + 1] if index + 1 < len(slabs) else None
+                break
+            if collection < min_amount:
+                next_slab = slab
+                break
+
+        if current_slab is None and slabs and collection >= Decimal(
+            str(slabs[-1].min_amount or 0)
+        ):
+            # Above last open-ended / past all max bounds — use last slab
+            last = slabs[-1]
+            if last.max_amount is None or collection <= Decimal(str(last.max_amount)):
+                current_slab = last
+                next_slab = None
+
+        if current_slab:
+            rate = Decimal(str(current_slab.rate_percent or 0))
+            amount = (collection * rate / Decimal("100")).quantize(
+                Decimal("0.01")
+            )
+
+            def _fmt(value: Decimal) -> str:
+                quantized = value.quantize(Decimal("0.01"))
+                if quantized == quantized.to_integral():
+                    return str(int(quantized))
+                return str(quantized)
+
+            min_a = Decimal(str(current_slab.min_amount or 0))
+            max_a = current_slab.max_amount
+            slab_label = (
+                f"{_fmt(min_a)} - {_fmt(Decimal(str(max_a)))}"
+                if max_a is not None
+                else f"{_fmt(min_a)}+"
+            )
+            eligible = rate > 0 and collection > 0
+        else:
+            rate = Decimal("0")
+            amount = Decimal("0")
+            slab_label = None
+            eligible = False
+
+        next_amount = None
+        next_rate = None
+        if next_slab is not None:
+            next_min = Decimal(str(next_slab.min_amount or 0))
+            next_amount = max(Decimal("0"), next_min - collection)
+            next_rate = Decimal(str(next_slab.rate_percent or 0))
+
+        return {
+            "eligible": eligible,
+            "amount": amount,
+            "rate": rate,
+            "slab": slab_label,
+            "collection": collection,
+            "next_bracket_amount": next_amount,
+            "next_bracket_rate": next_rate,
+        }
 
     @staticmethod
     def list_leads_for_export(

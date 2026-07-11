@@ -32,35 +32,73 @@ def ensure_schema_updates() -> None:
     """
     with engine.begin() as conn:
         inspector = inspect(conn)
-        if "prospects" not in inspector.get_table_names():
+        tables = inspector.get_table_names()
+
+        if "prospects" in tables:
+            existing = {col["name"] for col in inspector.get_columns("prospects")}
+
+            if "source" not in existing:
+                conn.execute(
+                    text("ALTER TABLE prospects ADD COLUMN source VARCHAR(100)")
+                )
+                conn.execute(
+                    text(
+                        "CREATE INDEX IF NOT EXISTS ix_prospects_source "
+                        "ON prospects (source)"
+                    )
+                )
+
+            if "follow_up_date" not in existing:
+                conn.execute(
+                    text("ALTER TABLE prospects ADD COLUMN follow_up_date DATE")
+                )
+                conn.execute(
+                    text(
+                        "CREATE INDEX IF NOT EXISTS ix_prospects_follow_up_date "
+                        "ON prospects (follow_up_date)"
+                    )
+                )
+
+        if "users" in tables:
+            user_cols = {col["name"] for col in inspector.get_columns("users")}
+            if "monthly_sales_target" not in user_cols:
+                conn.execute(
+                    text(
+                        "ALTER TABLE users "
+                        "ADD COLUMN monthly_sales_target NUMERIC(12, 2) "
+                        "DEFAULT 100000"
+                    )
+                )
+
+
+def seed_default_incentive_slabs() -> None:
+    """Seed starter slabs when the table is empty."""
+    db = SessionLocal()
+    try:
+        if db.query(IncentiveSlab).count() > 0:
             return
-
-        existing = {col["name"] for col in inspector.get_columns("prospects")}
-
-        if "source" not in existing:
-            conn.execute(
-                text("ALTER TABLE prospects ADD COLUMN source VARCHAR(100)")
-            )
-            conn.execute(
-                text(
-                    "CREATE INDEX IF NOT EXISTS ix_prospects_source "
-                    "ON prospects (source)"
+        defaults = [
+            (0, 25000, 1),
+            (25000, 50000, 2),
+            (50000, 100000, 3),
+            (100000, None, 5),
+        ]
+        for min_amount, max_amount, rate in defaults:
+            db.add(
+                IncentiveSlab(
+                    min_amount=min_amount,
+                    max_amount=max_amount,
+                    rate_percent=rate,
+                    is_active=True,
                 )
             )
-
-        if "follow_up_date" not in existing:
-            conn.execute(
-                text("ALTER TABLE prospects ADD COLUMN follow_up_date DATE")
-            )
-            conn.execute(
-                text(
-                    "CREATE INDEX IF NOT EXISTS ix_prospects_follow_up_date "
-                    "ON prospects (follow_up_date)"
-                )
-            )
+        db.commit()
+    finally:
+        db.close()
 
 
 ensure_schema_updates()
+seed_default_incentive_slabs()
 
 app = FastAPI(
     title="LMT API",

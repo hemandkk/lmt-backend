@@ -8,6 +8,7 @@ from pydantic import (
     ConfigDict,
     EmailStr,
     Field,
+    computed_field,
     field_validator,
     model_validator,
 )
@@ -360,6 +361,35 @@ class ProspectResponse(BaseModel):
     @classmethod
     def coerce_bool(cls, value: Any) -> bool:
         return bool(value)
+
+    @staticmethod
+    def _payment_counts(payment: PaymentResponse) -> bool:
+        status = payment.payment_status
+        if status is None:
+            return True
+        if isinstance(status, PaymentStatus):
+            return status == PaymentStatus.completed
+        return str(status).lower() == PaymentStatus.completed.value
+
+    @computed_field(alias="totalPaid")
+    @property
+    def total_paid(self) -> Decimal:
+        """Sum of completed payment amounts."""
+        total = Decimal("0")
+        for payment in self.payments or []:
+            if self._payment_counts(payment):
+                total += Decimal(str(payment.amount))
+        return total
+
+    @computed_field(alias="paymentPercentage")
+    @property
+    def payment_percentage(self) -> float:
+        """(totalPaid / estimatedValue) * 100."""
+        estimated = self.estimated_deal_value or Decimal("0")
+        if estimated <= 0:
+            return 0.0
+        pct = (self.total_paid / estimated) * Decimal("100")
+        return float(round(pct, 2))
 
 
 class ProspectListResponse(BaseModel):
