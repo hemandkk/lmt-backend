@@ -74,15 +74,12 @@ def delete_course(
     db: Session = Depends(get_db),
     user=Depends(get_current_user),
 ):
+    try:
+        MasterService.delete_course(db, course_id)
+    except ValueError as ex:
+        raise HTTPException(status_code=404, detail=str(ex))
 
-    MasterService.delete_course(
-        db,
-        course_id,
-    )
-
-    return {
-        "message": "Course deleted."
-    }
+    return {"message": "Course deleted."}
 
 
 # ==========================================================

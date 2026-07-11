@@ -9,6 +9,8 @@ from app.api.v1.payments import router as payment_router
 from app.core.security import hash_password
 from app.db.base import Base
 from app.db.models.activity_log import ActivityLog
+from app.db.models.course import Course
+from app.db.models.incentive_slab import IncentiveSlab
 from app.db.models.notification import Notification
 from app.db.models.payment import Payment
 from app.db.models.prospect import Prospect
