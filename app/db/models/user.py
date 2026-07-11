@@ -75,3 +75,14 @@ class User(TimestampMixin, Base):
         "Prospect",
         back_populates="assigned_to"
     )
+
+    notifications = relationship(
+        "Notification",
+        back_populates="user",
+        cascade="all, delete-orphan",
+    )
+
+    activity_logs = relationship(
+        "ActivityLog",
+        back_populates="user",
+    )

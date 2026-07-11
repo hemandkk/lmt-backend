@@ -1,16 +1,18 @@
- fastapi
- uvicorn[standard]
- sqlalchemy
- psycopg[binary]
- alembic
- python-jose[cryptography]
- python-multipart
- pydantic-settings
- email-validator
- passlib[bcrypt]==1.7.4
- bcrypt==4.0.1
-#DEV 
- pytest
- httpx
- black
- isort
+fastapi
+uvicorn[standard]
+sqlalchemy
+psycopg[binary]
+alembic
+python-jose[cryptography]
+python-multipart
+pydantic-settings
+email-validator
+passlib[bcrypt]==1.7.4
+bcrypt==4.0.1
+openpyxl
+reportlab
+#DEV
+pytest
+httpx
+black
+isort

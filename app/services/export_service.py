@@ -1,0 +1,305 @@
+import csv
+import io
+from datetime import date
+from typing import Any, Optional
+
+from fastapi.responses import StreamingResponse
+from sqlalchemy.orm import Session
+
+from app.repositories.analytics_repository import AnalyticsRepository
+from app.services.dashboard_service import DashboardService
+
+
+class ExportService:
+
+    @staticmethod
+    def export(
+        db: Session,
+        *,
+        export_type: str,
+        fmt: str,
+        date_from: Optional[date] = None,
+        date_to: Optional[date] = None,
+        employee_id: Optional[int] = None,
+        stage: Optional[str] = None,
+        source: Optional[str] = None,
+        current_user_id: Optional[int] = None,
+        is_admin: bool = False,
+    ) -> StreamingResponse:
+        export_type = export_type.lower().strip()
+        fmt = fmt.lower().strip()
+
+        if fmt not in ("xlsx", "csv", "pdf"):
+            raise ValueError("Unsupported format. Use xlsx, csv, or pdf.")
+
+        if export_type not in (
+            "leads",
+            "employee_performance",
+            "sales",
+            "dashboard",
+        ):
+            raise ValueError(
+                "Unsupported export_type. Use leads, employee_performance, sales, or dashboard."
+            )
+
+        # Employees can only export their own scoped data
+        scoped_employee_id = employee_id
+        if not is_admin:
+            scoped_employee_id = current_user_id
+
+        headers, rows, title = ExportService._build_dataset(
+            db,
+            export_type=export_type,
+            date_from=date_from,
+            date_to=date_to,
+            employee_id=scoped_employee_id,
+            stage=stage,
+            source=source,
+            is_admin=is_admin,
+        )
+
+        filename = f"{export_type}_export.{fmt}"
+
+        if fmt == "csv":
+            return ExportService._to_csv(headers, rows, filename)
+        if fmt == "xlsx":
+            return ExportService._to_xlsx(headers, rows, filename, title)
+        return ExportService._to_pdf(headers, rows, filename, title)
+
+    @staticmethod
+    def _build_dataset(
+        db: Session,
+        *,
+        export_type: str,
+        date_from: Optional[date],
+        date_to: Optional[date],
+        employee_id: Optional[int],
+        stage: Optional[str],
+        source: Optional[str],
+        is_admin: bool,
+    ) -> tuple[list[str], list[list[Any]], str]:
+        if export_type == "leads":
+            prospects = AnalyticsRepository.list_leads_for_export(
+                db,
+                employee_id=employee_id,
+                date_from=date_from,
+                date_to=date_to,
+                stage=stage,
+                source=source,
+            )
+            headers = [
+                "Prospect ID",
+                "Name",
+                "Email",
+                "Phone",
+                "Stage",
+                "Source",
+                "Assigned To",
+                "Deal Value",
+                "Follow-up Date",
+                "Created At",
+            ]
+            rows = [
+                [
+                    p.prospect_id,
+                    p.name,
+                    p.email or "",
+                    p.phone or "",
+                    p.stage.value if hasattr(p.stage, "value") else str(p.stage),
+                    p.source or "",
+                    p.assigned_to_id or "",
+                    float(p.estimated_deal_value or 0),
+                    str(p.follow_up_date or ""),
+                    str(p.created_at),
+                ]
+                for p in prospects
+            ]
+            return headers, rows, "Leads Export"
+
+        if export_type == "employee_performance":
+            data = AnalyticsRepository.employee_performance(
+                db,
+                date_from=date_from,
+                date_to=date_to,
+                employee_id=employee_id,
+                stage=stage,
+                source=source,
+            )
+            headers = [
+                "Employee ID",
+                "Employee Code",
+                "Name",
+                "Leads Assigned",
+                "Leads Converted",
+                "Revenue",
+                "Conversion Rate (%)",
+            ]
+            rows = [
+                [
+                    d["employee_id"],
+                    d["employee_code"] or "",
+                    d["employee_name"],
+                    d["leads_assigned"],
+                    d["leads_converted"],
+                    float(d["revenue"]),
+                    d["conversion_rate"],
+                ]
+                for d in data
+            ]
+            return headers, rows, "Employee Performance"
+
+        if export_type == "sales":
+            monthly = AnalyticsRepository.monthly_sales(
+                db,
+                employee_id=employee_id,
+                date_from=date_from,
+                date_to=date_to,
+            )
+            headers = ["Month", "Year", "Revenue", "Deals"]
+            rows = [
+                [m["month"], m["year"], float(m["revenue"]), m.get("deals", 0)]
+                for m in monthly
+            ]
+            return headers, rows, "Sales Report"
+
+        # dashboard
+        if is_admin and employee_id is None:
+            dash = DashboardService.admin_dashboard(db, date_from, date_to)
+            headers = ["Metric", "Value"]
+            rows = [
+                ["Total Employees", dash.total_employees],
+                ["Total Leads", dash.total_leads],
+                ["Total Revenue", float(dash.total_revenue)],
+            ]
+            for stage_item in dash.leads_by_stage:
+                rows.append([f"Stage: {stage_item.stage}", stage_item.count])
+            for perf in dash.top_performers:
+                rows.append(
+                    [
+                        f"Top: {perf.employee_name}",
+                        f"Revenue={float(perf.revenue)}, Converted={perf.leads_converted}",
+                    ]
+                )
+            return headers, rows, "Admin Dashboard"
+
+        emp_id = employee_id
+        dash = DashboardService.employee_dashboard(db, emp_id, date_from, date_to)
+        headers = ["Metric", "Value"]
+        rows = [
+            ["Leads Total", dash.lead_counts.total],
+            ["Leads Today", dash.lead_counts.today],
+            ["Leads This Week", dash.lead_counts.this_week],
+            ["Leads This Month", dash.lead_counts.this_month],
+            ["Advanced Paid Leads", dash.payment_status.advanced_paid],
+            ["50% Paid Leads", dash.payment_status.fifty_percent_paid],
+            ["100% Paid Leads", dash.payment_status.hundred_percent_paid],
+            ["Collected Today", float(dash.payment_collected.today)],
+            ["Collected This Week", float(dash.payment_collected.this_week)],
+            ["Collected This Month", float(dash.payment_collected.this_month)],
+            ["Collected Total", float(dash.payment_collected.total)],
+        ]
+        return headers, rows, "Employee Dashboard"
+
+    @staticmethod
+    def _to_csv(
+        headers: list[str],
+        rows: list[list[Any]],
+        filename: str,
+    ) -> StreamingResponse:
+        buffer = io.StringIO()
+        writer = csv.writer(buffer)
+        writer.writerow(headers)
+        writer.writerows(rows)
+        buffer.seek(0)
+
+        return StreamingResponse(
+            iter([buffer.getvalue()]),
+            media_type="text/csv",
+            headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+        )
+
+    @staticmethod
+    def _to_xlsx(
+        headers: list[str],
+        rows: list[list[Any]],
+        filename: str,
+        title: str,
+    ) -> StreamingResponse:
+        try:
+            from openpyxl import Workbook
+        except ImportError as exc:
+            raise ValueError(
+                "openpyxl is required for Excel export. Install with: pip install openpyxl"
+            ) from exc
+
+        wb = Workbook()
+        ws = wb.active
+        ws.title = title[:31]
+        ws.append(headers)
+        for row in rows:
+            ws.append(list(row))
+
+        buffer = io.BytesIO()
+        wb.save(buffer)
+        buffer.seek(0)
+
+        return StreamingResponse(
+            buffer,
+            media_type=(
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            ),
+            headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+        )
+
+    @staticmethod
+    def _to_pdf(
+        headers: list[str],
+        rows: list[list[Any]],
+        filename: str,
+        title: str,
+    ) -> StreamingResponse:
+        try:
+            from reportlab.lib import colors
+            from reportlab.lib.pagesizes import landscape, letter
+            from reportlab.lib.styles import getSampleStyleSheet
+            from reportlab.platypus import (
+                Paragraph,
+                SimpleDocTemplate,
+                Spacer,
+                Table,
+                TableStyle,
+            )
+        except ImportError as exc:
+            raise ValueError(
+                "reportlab is required for PDF export. Install with: pip install reportlab"
+            ) from exc
+
+        buffer = io.BytesIO()
+        doc = SimpleDocTemplate(buffer, pagesize=landscape(letter))
+        styles = getSampleStyleSheet()
+        elements = [Paragraph(title, styles["Heading1"]), Spacer(1, 12)]
+
+        data = [headers] + [[str(cell) for cell in row] for row in rows]
+        table = Table(data, repeatRows=1)
+        table.setStyle(
+            TableStyle(
+                [
+                    ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#1f4e79")),
+                    ("TEXTCOLOR", (0, 0), (-1, 0), colors.whitesmoke),
+                    ("FONTNAME", (0, 0), (-1, 0), "Helvetica-Bold"),
+                    ("FONTSIZE", (0, 0), (-1, -1), 8),
+                    ("GRID", (0, 0), (-1, -1), 0.5, colors.grey),
+                    ("ROWBACKGROUNDS", (0, 1), (-1, -1), [colors.white, colors.HexColor("#f2f2f2")]),
+                    ("VALIGN", (0, 0), (-1, -1), "MIDDLE"),
+                ]
+            )
+        )
+        elements.append(table)
+        doc.build(elements)
+        buffer.seek(0)
+
+        return StreamingResponse(
+            buffer,
+            media_type="application/pdf",
+            headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+        )

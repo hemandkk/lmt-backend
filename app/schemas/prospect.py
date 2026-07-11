@@ -78,6 +78,10 @@ class ProspectCreate(BaseModel):
 
     assigned_to_id: Optional[int] = None
 
+    source: Optional[str] = None
+
+    follow_up_date: Optional[date] = None
+
     payments: list[PaymentCreate] = []
 
 
@@ -123,6 +127,10 @@ class ProspectUpdate(BaseModel):
 
     exam_certified: Optional[bool] = None
 
+    source: Optional[str] = None
+
+    follow_up_date: Optional[date] = None
+
 
 # --------------------------------------------------
 # Response
@@ -167,6 +175,10 @@ class ProspectResponse(BaseModel):
     course_id: Optional[int]
 
     specialization: Optional[str]
+
+    source: Optional[str] = None
+
+    follow_up_date: Optional[date] = None
 
     created_at: datetime
 

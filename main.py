@@ -8,6 +8,8 @@ from app.api.v1.api import api_router
 from app.api.v1.payments import router as payment_router
 from app.core.security import hash_password
 from app.db.base import Base
+from app.db.models.activity_log import ActivityLog
+from app.db.models.notification import Notification
 from app.db.models.payment import Payment
 from app.db.models.prospect import Prospect
 from app.db.models.prospect_document import ProspectDocument

@@ -1,3 +1,5 @@
+from typing import Optional
+
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 from jose import JWTError
@@ -10,6 +12,11 @@ from app.repositories.user_repository import UserRepository
 
 oauth2_scheme = OAuth2PasswordBearer(
     tokenUrl="/auth/login"
+)
+
+optional_oauth2_scheme = OAuth2PasswordBearer(
+    tokenUrl="/auth/login",
+    auto_error=False,
 )
 
 
@@ -52,3 +59,15 @@ def get_current_user(
         )
 
     return user
+
+
+def get_optional_user(
+    token: Optional[str] = Depends(optional_oauth2_scheme),
+    db: Session = Depends(get_db),
+) -> Optional[User]:
+    if not token:
+        return None
+    try:
+        return get_current_user(token=token, db=db)
+    except HTTPException:
+        return None

@@ -133,6 +133,18 @@ class Prospect(TimestampMixin, Base):
         index=True,
     )
 
+    source = Column(
+        String(100),
+        nullable=True,
+        index=True,
+    )
+
+    follow_up_date = Column(
+        Date,
+        nullable=True,
+        index=True,
+    )
+
     assigned_to_id = Column(
         Integer,
         ForeignKey("users.id"),
