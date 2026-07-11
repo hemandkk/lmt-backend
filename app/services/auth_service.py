@@ -34,12 +34,13 @@ class AuthService:
 
         if not user:
             return None
-        """ print("Password from DB:", repr(user.password_hash))
+        print("Password from DB:", repr(user.password_hash))
         print("Length:", len(user.password_hash))
         hashed = hash_password("asdf1234")
         print('$$$$$$$$$$')
         print(repr(hashed))
-        print(verify_password("asdf1234", hashed)) """
+        print('is true')
+        print(verify_password("asdf1234", hashed)) 
 
         db_hash = "$2b$12$o0PqavtBPaFe1sXfz8CT0.5kSgquoleHR.k.Zuq.2ojDwBKtguq3."
         print('$$$$$$$$$$')

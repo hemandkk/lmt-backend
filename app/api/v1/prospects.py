@@ -41,7 +41,7 @@ def get_next_prospect_id(db: Session = Depends(get_db)):
     print("prospect_id")
     print(prospect_id)
     return {
-        "employeeId": prospect_id
+        "next_id": prospect_id
     }
 
 

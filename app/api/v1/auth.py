@@ -62,8 +62,6 @@ def login(
             "role": user.role.value,
         }
     )
-    print("$#$#$#")
-    print(refresh_token)
     return {
         "access_token": access_token,
         "refresh_token": refresh_token,

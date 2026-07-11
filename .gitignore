@@ -8,7 +8,7 @@ __pycache__/
 # testing
 /coverage
 
-
+/venv
 # misc
 .DS_Store
 *.pem
