@@ -107,13 +107,20 @@ def _extract_receipt_files(
 
 @router.get("/utility/next-prospect-id")
 def get_next_prospect_id(db: Session = Depends(get_db)):
-    prospect_id = generate_next_code(
-        db=db,
-        model=Prospect,
-        field="prospect_id",
-        prefix="PRO",
-    )
-    return {"next_id": prospect_id, "prospectId": prospect_id}
+    try:
+        prospect_id = generate_next_code(
+            db=db,
+            model=Prospect,
+            field="prospect_id",
+            prefix="PRO",
+            digits=4,
+        )
+        return {"next_id": prospect_id, "prospectId": prospect_id}
+    except Exception as ex:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to generate prospect id: {ex}",
+        ) from ex
 
 
 @router.get("", response_model=ProspectListResponse)

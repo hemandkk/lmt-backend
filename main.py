@@ -3,6 +3,7 @@ from pathlib import Path
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
+from sqlalchemy import inspect, text
 
 from app.api.v1.api import api_router
 from app.api.v1.payments import router as payment_router
@@ -22,6 +23,44 @@ UPLOAD_DIR = Path("app/uploads")
 UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
 
 Base.metadata.create_all(bind=engine)
+
+
+def ensure_schema_updates() -> None:
+    """
+    create_all() does not ADD columns to existing tables.
+    Apply safe, idempotent column/index patches here.
+    """
+    with engine.begin() as conn:
+        inspector = inspect(conn)
+        if "prospects" not in inspector.get_table_names():
+            return
+
+        existing = {col["name"] for col in inspector.get_columns("prospects")}
+
+        if "source" not in existing:
+            conn.execute(
+                text("ALTER TABLE prospects ADD COLUMN source VARCHAR(100)")
+            )
+            conn.execute(
+                text(
+                    "CREATE INDEX IF NOT EXISTS ix_prospects_source "
+                    "ON prospects (source)"
+                )
+            )
+
+        if "follow_up_date" not in existing:
+            conn.execute(
+                text("ALTER TABLE prospects ADD COLUMN follow_up_date DATE")
+            )
+            conn.execute(
+                text(
+                    "CREATE INDEX IF NOT EXISTS ix_prospects_follow_up_date "
+                    "ON prospects (follow_up_date)"
+                )
+            )
+
+
+ensure_schema_updates()
 
 app = FastAPI(
     title="LMT API",

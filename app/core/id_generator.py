@@ -1,8 +1,8 @@
-from sqlalchemy.orm import Session
-from app.db.models.prospect import Prospect
-from app.db.models.user import User
 import re
-from sqlalchemy import desc,func
+
+from sqlalchemy import desc, func
+from sqlalchemy.orm import Session
+
 
 def generate_id(
     db: Session,
@@ -13,27 +13,23 @@ def generate_id(
 ) -> str:
     """
     Generates IDs like:
-
-    EMP00001
-    PRO00001
-    PAY00001
-    DOC00001
-    CRS00001
+    EMP00001, PRO00001, PAY00001, DOC00001, CRS00001
     """
-
-    max_value = db.query(
-        func.max(getattr(model, field))
-    ).scalar()
+    column = getattr(model, field)
+    max_value = db.query(func.max(column)).scalar()
 
     if not max_value:
         next_number = 1
     else:
         try:
-            next_number = int(max_value.replace(prefix, "")) + 1
+            # Strip any non-digit prefix (PRO / PSP / etc.)
+            match = re.search(r"(\d+)$", str(max_value))
+            next_number = int(match.group(1)) + 1 if match else 1
         except Exception:
             next_number = 1
 
     return f"{prefix}{next_number:0{digits}}"
+
 
 def generate_next_code(
     db: Session,
@@ -42,20 +38,23 @@ def generate_next_code(
     prefix: str,
     digits: int = 4,
 ) -> str:
-    last_record = (
-        db.query(model)
-        .filter(getattr(model, field).isnot(None))
+    """
+    Preview the next code without loading the full ORM row
+    (avoids 500s when mapped columns are missing from DB).
+    """
+    column = getattr(model, field)
+
+    last_code = (
+        db.query(column)
+        .filter(column.isnot(None))
         .order_by(desc(model.id))
-        .first()
+        .limit(1)
+        .scalar()
     )
 
-    if not last_record:
+    if not last_code:
         return f"{prefix}{1:0{digits}}"
 
-    last_code = getattr(last_record, field)
-
-    match = re.search(r"(\d+)$", last_code or "")
-
+    match = re.search(r"(\d+)$", str(last_code))
     next_number = int(match.group(1)) + 1 if match else 1
-
     return f"{prefix}{next_number:0{digits}}"
