@@ -90,6 +90,33 @@ class PaymentResponse(BaseModel):
     )
 
 
+class ProspectPaymentListResponse(BaseModel):
+    model_config = _alias_config()
+
+    items: list[PaymentResponse]
+    total: int
+
+
+class TimelineItem(BaseModel):
+    model_config = _alias_config()
+
+    id: str
+    type: str
+    title: str
+    description: str
+    created_at: datetime = Field(serialization_alias="createdAt")
+    user_id: Optional[int] = Field(default=None, serialization_alias="userId")
+    user_name: Optional[str] = Field(default=None, serialization_alias="userName")
+    meta: Optional[dict] = None
+
+
+class ProspectTimelineResponse(BaseModel):
+    model_config = _alias_config()
+
+    items: list[TimelineItem]
+    total: int
+
+
 # --------------------------------------------------
 # Document (inline metadata; files via multipart)
 # --------------------------------------------------

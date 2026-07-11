@@ -13,30 +13,47 @@ from app.db.models.payment import (
 )
 
 
+def _alias_config() -> ConfigDict:
+    return ConfigDict(
+        populate_by_name=True,
+        from_attributes=True,
+    )
+
+
 # -----------------------------
 # Base Schema
 # -----------------------------
 class PaymentBase(BaseModel):
-    prospect_id: int
+    model_config = _alias_config()
+
+    prospect_id: int = Field(..., alias="prospectId")
 
     amount: Decimal = Field(..., gt=0)
 
-    payment_type: PaymentType
+    payment_type: PaymentType = Field(..., alias="paymentType")
 
-    payment_method: PaymentMethod = PaymentMethod.cash
+    payment_method: PaymentMethod = Field(
+        default=PaymentMethod.cash,
+        alias="paymentMethod",
+    )
 
-    payment_status: PaymentStatus = PaymentStatus.completed
+    payment_status: PaymentStatus = Field(
+        default=PaymentStatus.completed,
+        alias="paymentStatus",
+    )
 
-    payment_date: date
+    payment_date: date = Field(..., alias="paymentDate")
 
     transaction_number: Optional[str] = Field(
         default=None,
         max_length=100,
+        alias="transactionNumber",
     )
 
     reference_number: Optional[str] = Field(
         default=None,
         max_length=100,
+        alias="referenceNumber",
     )
 
     notes: Optional[str] = None
@@ -60,19 +77,39 @@ class PaymentCreate(PaymentBase):
 # Update
 # -----------------------------
 class PaymentUpdate(BaseModel):
+    model_config = _alias_config()
+
     amount: Optional[Decimal] = Field(default=None, gt=0)
 
-    payment_type: Optional[PaymentType] = None
+    payment_type: Optional[PaymentType] = Field(
+        default=None,
+        alias="paymentType",
+    )
 
-    payment_method: Optional[PaymentMethod] = None
+    payment_method: Optional[PaymentMethod] = Field(
+        default=None,
+        alias="paymentMethod",
+    )
 
-    payment_status: Optional[PaymentStatus] = None
+    payment_status: Optional[PaymentStatus] = Field(
+        default=None,
+        alias="paymentStatus",
+    )
 
-    payment_date: Optional[date] = None
+    payment_date: Optional[date] = Field(
+        default=None,
+        alias="paymentDate",
+    )
 
-    transaction_number: Optional[str] = None
+    transaction_number: Optional[str] = Field(
+        default=None,
+        alias="transactionNumber",
+    )
 
-    reference_number: Optional[str] = None
+    reference_number: Optional[str] = Field(
+        default=None,
+        alias="referenceNumber",
+    )
 
     notes: Optional[str] = None
 
@@ -88,26 +125,26 @@ class PaymentUpdate(BaseModel):
 # Receipt Upload Response
 # -----------------------------
 class ReceiptUploadResponse(BaseModel):
-    receipt_url: str
+    model_config = _alias_config()
+
+    receipt_url: str = Field(..., alias="receiptUrl")
 
 
 # -----------------------------
 # Response
 # -----------------------------
 class PaymentResponse(PaymentBase):
-    model_config = ConfigDict(from_attributes=True)
-
     id: int
 
-    payment_id: str
+    payment_id: str = Field(..., alias="paymentId")
 
-    receipt_url: Optional[str] = None
+    receipt_url: Optional[str] = Field(default=None, alias="receiptUrl")
 
-    created_by: Optional[int] = None
+    created_by: Optional[int] = Field(default=None, alias="createdBy")
 
-    created_at: datetime
+    created_at: datetime = Field(..., alias="createdAt")
 
-    updated_at: datetime
+    updated_at: datetime = Field(..., alias="updatedAt")
 
 
 # -----------------------------

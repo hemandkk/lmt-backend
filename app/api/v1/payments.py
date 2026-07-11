@@ -1,14 +1,18 @@
 from __future__ import annotations
 
+from typing import Any
+
 from fastapi import (
     APIRouter,
     Depends,
     File,
     HTTPException,
     Query,
+    Request,
     UploadFile,
     status,
 )
+from pydantic import ValidationError
 from sqlalchemy.orm import Session
 
 from app.db.models.user import User
@@ -34,22 +38,91 @@ router = APIRouter(
 )
 
 
+def _is_upload(value: Any) -> bool:
+    return hasattr(value, "filename") and hasattr(value, "file")
+
+
+def _form_value(form, *keys: str) -> Any:
+    for key in keys:
+        value = form.get(key)
+        if value is not None and value != "":
+            return value
+    return None
+
+
 @router.post(
     "",
     response_model=PaymentResponse,
     status_code=status.HTTP_201_CREATED,
 )
-def create_payment(
-    payment: PaymentCreate,
+async def create_payment(
+    request: Request,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
+    """
+    Create a payment.
+    - JSON body (snake_case or camelCase)
+    - multipart/form-data from listing more-action:
+      prospectId, amount, paymentType, paymentDate, notes, receipt
+    """
+    content_type = (request.headers.get("content-type") or "").lower()
+    receipt_file: UploadFile | None = None
+
+    try:
+        if "multipart/form-data" in content_type:
+            form = await request.form()
+            payload = {
+                "prospectId": _form_value(form, "prospectId", "prospect_id"),
+                "amount": _form_value(form, "amount"),
+                "paymentType": _form_value(
+                    form, "paymentType", "payment_type"
+                ),
+                "paymentMethod": _form_value(
+                    form, "paymentMethod", "payment_method"
+                ),
+                "paymentStatus": _form_value(
+                    form, "paymentStatus", "payment_status"
+                ),
+                "paymentDate": _form_value(
+                    form, "paymentDate", "payment_date"
+                ),
+                "transactionNumber": _form_value(
+                    form, "transactionNumber", "transaction_number"
+                ),
+                "referenceNumber": _form_value(
+                    form, "referenceNumber", "reference_number"
+                ),
+                "notes": _form_value(form, "notes"),
+            }
+            # Drop unset optionals so defaults apply
+            payload = {k: v for k, v in payload.items() if v is not None}
+
+            for name, value in form.multi_items():
+                if not _is_upload(value) or not value.filename:
+                    continue
+                if name in ("receipt", "file", "receiptFile") or name.startswith(
+                    "receipt"
+                ):
+                    receipt_file = value
+                    break
+
+            payment = PaymentCreate.model_validate(payload)
+        else:
+            payment = PaymentCreate.model_validate(await request.json())
+    except ValidationError as ex:
+        raise HTTPException(status_code=422, detail=ex.errors()) from ex
+
     ensure_prospect_access(db, payment.prospect_id, current_user)
     service = PaymentService(db)
     try:
-        return service.create_payment(payment, current_user.id)
+        return service.create_payment(
+            payment,
+            current_user.id,
+            receipt_file=receipt_file,
+        )
     except ValueError as ex:
-        raise HTTPException(status_code=400, detail=str(ex))
+        raise HTTPException(status_code=400, detail=str(ex)) from ex
 
 
 @router.get("", response_model=PaymentListResponse)
@@ -117,7 +190,7 @@ def update_payment(
     try:
         return PaymentService(db).update_payment(payment_id, payment)
     except ValueError as ex:
-        raise HTTPException(status_code=400, detail=str(ex))
+        raise HTTPException(status_code=400, detail=str(ex)) from ex
 
 
 @router.delete("/{payment_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -133,7 +206,7 @@ def delete_payment(
     try:
         PaymentService(db).delete_payment(payment_id)
     except ValueError as ex:
-        raise HTTPException(status_code=404, detail=str(ex))
+        raise HTTPException(status_code=404, detail=str(ex)) from ex
 
 
 @router.post(
@@ -154,4 +227,4 @@ def upload_receipt(
         payment = PaymentService(db).upload_receipt(payment_id, file)
         return ReceiptUploadResponse(receipt_url=payment.receipt_url)
     except ValueError as ex:
-        raise HTTPException(status_code=400, detail=str(ex))
+        raise HTTPException(status_code=400, detail=str(ex)) from ex

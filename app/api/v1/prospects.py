@@ -25,10 +25,17 @@ from app.dependencies.auth import get_current_user, get_optional_user
 from app.schemas.prospect import (
     ProspectCreate,
     ProspectListResponse,
+    ProspectPaymentListResponse,
     ProspectResponse,
+    ProspectTimelineResponse,
     ProspectUpdate,
+    TimelineItem,
 )
+from app.schemas.document import DocumentListResponse, DocumentResponse
 from app.services.prospect_service import ProspectService
+from app.services.document_service import DocumentService
+from app.services.notification_service import ActivityLogService
+from app.repositories.payment_repository import PaymentRepository
 
 router = APIRouter(
     prefix="/prospects",
@@ -484,6 +491,106 @@ async def update_prospect(
         raise HTTPException(status_code=404, detail=str(ex))
 
 
+@router.get(
+    "/{prospect_id}/documents",
+    response_model=DocumentListResponse,
+)
+def list_prospect_documents(
+    prospect_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """List documents for a lead (same data as GET /documents/prospects/{id})."""
+    try:
+        prospect = ProspectService.get(db, prospect_id)
+        _ensure_prospect_access(prospect, current_user)
+    except ValueError as ex:
+        raise HTTPException(status_code=404, detail=str(ex))
+
+    documents = DocumentService.get_documents(db, prospect_id)
+    return {"items": documents, "total": len(documents)}
+
+
+@router.post(
+    "/{prospect_id}/documents",
+    response_model=DocumentResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def upload_prospect_document(
+    prospect_id: int,
+    request: Request,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Listing more-action: upload a document via multipart.
+    Accepts docType/documentType/document_type + file/document/documents.
+    """
+    try:
+        prospect = ProspectService.get(db, prospect_id)
+        _ensure_prospect_access(prospect, current_user)
+    except ValueError as ex:
+        raise HTTPException(status_code=404, detail=str(ex))
+
+    form = await request.form()
+    doc_type_raw = (
+        form.get("docType")
+        or form.get("documentType")
+        or form.get("document_type")
+        or form.get("doc_type")
+        or form.get("type")
+    )
+    if not doc_type_raw or not isinstance(doc_type_raw, str):
+        raise HTTPException(
+            status_code=400,
+            detail="document type is required (docType / documentType).",
+        )
+
+    try:
+        document_type = DocumentType(doc_type_raw.strip())
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Invalid document type: {doc_type_raw}",
+        ) from exc
+
+    remarks = form.get("remarks")
+    if remarks is not None and not isinstance(remarks, str):
+        remarks = None
+
+    upload = None
+    preferred_names = {
+        "file",
+        "document",
+        "documents",
+        "receipt",
+        "upload",
+    }
+    for name, value in form.multi_items():
+        if _is_upload(value) and value.filename and name in preferred_names:
+            upload = value
+            break
+    if upload is None:
+        for _, value in form.multi_items():
+            if _is_upload(value) and value.filename:
+                upload = value
+                break
+
+    if upload is None:
+        raise HTTPException(status_code=400, detail="file is required.")
+
+    try:
+        return DocumentService.upload_document(
+            db=db,
+            prospect_id=prospect_id,
+            document_type=document_type,
+            file=upload,
+            remarks=remarks,
+        )
+    except ValueError as ex:
+        raise HTTPException(status_code=400, detail=str(ex)) from ex
+
+
 @router.post(
     "/{prospect_id}/documents/{doc_type}",
     response_model=ProspectResponse,
@@ -494,9 +601,15 @@ async def upload_lead_document(
     file: FastAPIUploadFile = File(...),
     remarks: Optional[str] = Form(None),
     db: Session = Depends(get_db),
-    current_user: Optional[User] = Depends(get_optional_user),
+    current_user: User = Depends(get_current_user),
 ):
     """List more-action / edit: upload or replace a single document type."""
+    try:
+        prospect = ProspectService.get(db, prospect_id)
+        _ensure_prospect_access(prospect, current_user)
+    except ValueError as ex:
+        raise HTTPException(status_code=404, detail=str(ex))
+
     try:
         DocumentType(doc_type)
     except ValueError as exc:
@@ -507,11 +620,129 @@ async def upload_lead_document(
             db,
             prospect_id,
             ProspectUpdate(documents=[]),
-            actor_id=current_user.id if current_user else None,
+            actor_id=current_user.id,
             document_files={doc_type.value: file},
         )
     except ValueError as ex:
         raise HTTPException(status_code=404, detail=str(ex))
+
+
+@router.get(
+    "/{prospect_id}/payments",
+    response_model=ProspectPaymentListResponse,
+)
+def list_prospect_payments(
+    prospect_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """List payments for a lead."""
+    try:
+        prospect = ProspectService.get(db, prospect_id)
+        _ensure_prospect_access(prospect, current_user)
+    except ValueError as ex:
+        raise HTTPException(status_code=404, detail=str(ex))
+
+    items = PaymentRepository(db).get_by_prospect(prospect_id)
+    return {"items": items, "total": len(items)}
+
+
+@router.get(
+    "/{prospect_id}/timeline",
+    response_model=ProspectTimelineResponse,
+)
+def get_prospect_timeline(
+    prospect_id: int,
+    page: int = Query(1, ge=1),
+    page_size: int = Query(50, alias="pageSize", ge=1, le=200),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Lead activity timeline: activity logs + payments + document uploads,
+    newest first.
+    """
+    try:
+        prospect = ProspectService.get(db, prospect_id)
+        _ensure_prospect_access(prospect, current_user)
+    except ValueError as ex:
+        raise HTTPException(status_code=404, detail=str(ex))
+
+    items: list[TimelineItem] = []
+
+    logs = ActivityLogService.list(
+        db,
+        page=1,
+        page_size=200,
+        prospect_id=prospect_id,
+    )
+    for log in logs["items"]:
+        items.append(
+            TimelineItem(
+                id=f"log-{log['id']}",
+                type=log["action"],
+                title=log["action"].replace("_", " ").title(),
+                description=log["description"],
+                created_at=log["created_at"],
+                user_id=log["user_id"],
+                user_name=log.get("user_name"),
+                meta={"entityType": log["entity_type"], "entityId": log["entity_id"]},
+            )
+        )
+
+    for payment in prospect.payments or []:
+        ptype = (
+            payment.payment_type.value
+            if hasattr(payment.payment_type, "value")
+            else str(payment.payment_type)
+        )
+        items.append(
+            TimelineItem(
+                id=f"payment-{payment.id}",
+                type="payment",
+                title=f"Payment received ({ptype})",
+                description=f"Amount {payment.amount}"
+                + (f" — {payment.notes}" if payment.notes else ""),
+                created_at=payment.created_at,
+                user_id=payment.created_by,
+                user_name=None,
+                meta={
+                    "paymentId": payment.payment_id,
+                    "amount": str(payment.amount),
+                    "paymentType": ptype,
+                    "paymentDate": str(payment.payment_date),
+                },
+            )
+        )
+
+    for doc in prospect.documents or []:
+        dtype = (
+            doc.document_type.value
+            if hasattr(doc.document_type, "value")
+            else str(doc.document_type)
+        )
+        items.append(
+            TimelineItem(
+                id=f"document-{doc.id}",
+                type="document",
+                title=f"Document uploaded ({dtype})",
+                description=doc.original_filename or dtype,
+                created_at=doc.created_at,
+                user_id=None,
+                user_name=None,
+                meta={
+                    "documentId": doc.document_id,
+                    "docType": dtype,
+                    "fileUrl": doc.file_url,
+                },
+            )
+        )
+
+    items.sort(key=lambda x: x.created_at, reverse=True)
+    total = len(items)
+    start = (page - 1) * page_size
+    end = start + page_size
+    return {"items": items[start:end], "total": total}
 
 
 @router.post(
@@ -523,34 +754,63 @@ async def add_lead_payment(
     prospect_id: int,
     request: Request,
     db: Session = Depends(get_db),
-    current_user: Optional[User] = Depends(get_optional_user),
+    current_user: User = Depends(get_current_user),
 ):
     """
     List more-action: add a payment to an existing lead.
-    JSON body = LeadPaymentInput, or multipart with payload + receipt file.
+    Supports:
+    - JSON body (LeadPaymentInput)
+    - multipart with payload/data JSON + receipt
+    - flat multipart: amount, paymentType, paymentDate, notes, receipt
     """
     from app.schemas.prospect import LeadPaymentInput
 
+    try:
+        prospect = ProspectService.get(db, prospect_id)
+        _ensure_prospect_access(prospect, current_user)
+    except ValueError as ex:
+        raise HTTPException(status_code=404, detail=str(ex))
+
     content_type = (request.headers.get("content-type") or "").lower()
-    actor_id = current_user.id if current_user else None
+    actor_id = current_user.id
     receipt_files: dict[int, Any] = {}
 
     try:
         if "multipart/form-data" in content_type:
             form = await request.form()
             raw = form.get("payload") or form.get("data")
-            if not raw or not isinstance(raw, str):
-                raise HTTPException(
-                    status_code=400,
-                    detail="multipart requires 'payload' JSON field.",
-                )
-            payment = _parse_json_payload(raw, LeadPaymentInput)
+            if raw and isinstance(raw, str):
+                payment = _parse_json_payload(raw, LeadPaymentInput)
+            else:
+                # Flat listing-page form fields
+                flat = {
+                    "amount": form.get("amount"),
+                    "paymentType": form.get("paymentType")
+                    or form.get("payment_type"),
+                    "paymentMethod": form.get("paymentMethod")
+                    or form.get("payment_method"),
+                    "paymentDate": form.get("paymentDate")
+                    or form.get("payment_date"),
+                    "transactionNumber": form.get("transactionNumber")
+                    or form.get("transaction_number"),
+                    "notes": form.get("notes"),
+                }
+                flat = {k: v for k, v in flat.items() if v is not None and v != ""}
+                if "amount" not in flat or "paymentType" not in flat:
+                    raise HTTPException(
+                        status_code=400,
+                        detail=(
+                            "multipart requires 'payload' JSON, or flat fields "
+                            "amount + paymentType (+ paymentDate)."
+                        ),
+                    )
+                payment = LeadPaymentInput.model_validate(flat)
+
             uploads = [
                 (k, v)
                 for k, v in form.multi_items()
                 if _is_upload(v)
             ]
-            # Single receipt may be named "receipt" or "receipt_0"
             for name, upload in uploads:
                 if name in ("receipt", "receipt_0", "file") or name.startswith(
                     "receipt"
