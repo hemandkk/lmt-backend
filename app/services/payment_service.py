@@ -63,8 +63,19 @@ class PaymentService:
     def get_payment(self, payment_id: int) -> Payment | None:
         return self.payment_repo.get_by_id(payment_id)
 
-    def list_payments(self, skip: int = 0, limit: int = 20):
-        return self.payment_repo.list(skip=skip, limit=limit)
+    def list_payments(
+        self,
+        skip: int = 0,
+        limit: int = 20,
+        assigned_to_id: int | None = None,
+        prospect_id: int | None = None,
+    ):
+        return self.payment_repo.list(
+            skip=skip,
+            limit=limit,
+            assigned_to_id=assigned_to_id,
+            prospect_id=prospect_id,
+        )
 
     def get_payments_by_prospect(self, prospect_id: int):
         return self.payment_repo.get_by_prospect(prospect_id)

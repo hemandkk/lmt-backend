@@ -59,27 +59,51 @@ class DashboardService:
         db: Session,
         date_from: Optional[date] = None,
         date_to: Optional[date] = None,
+        employee_id: Optional[int] = None,
     ) -> AdminDashboardResponse:
         performance = AnalyticsRepository.employee_performance(
-            db, date_from=date_from, date_to=date_to
+            db,
+            date_from=date_from,
+            date_to=date_to,
+            employee_id=employee_id,
         )
         top = AnalyticsRepository.employee_performance(
-            db, date_from=date_from, date_to=date_to, limit=5
+            db,
+            date_from=date_from,
+            date_to=date_to,
+            employee_id=employee_id,
+            limit=5,
         )
         monthly = AnalyticsRepository.monthly_sales(
-            db, date_from=date_from, date_to=date_to
+            db,
+            date_from=date_from,
+            date_to=date_to,
+            employee_id=employee_id,
         )
         stages = AnalyticsRepository.leads_by_stage(
-            db, date_from=date_from, date_to=date_to
+            db,
+            date_from=date_from,
+            date_to=date_to,
+            employee_id=employee_id,
         )
 
         return AdminDashboardResponse(
-            total_employees=AnalyticsRepository.count_employees(db),
+            total_employees=(
+                1
+                if employee_id is not None
+                else AnalyticsRepository.count_employees(db)
+            ),
             total_leads=AnalyticsRepository.count_leads(
-                db, date_from=date_from, date_to=date_to
+                db,
+                date_from=date_from,
+                date_to=date_to,
+                employee_id=employee_id,
             ),
             total_revenue=AnalyticsRepository.payment_collected(
-                db, date_from=date_from, date_to=date_to
+                db,
+                date_from=date_from,
+                date_to=date_to,
+                employee_id=employee_id,
             ),
             leads_by_stage=[StageCountItem(**s) for s in stages],
             employee_performance=[EmployeePerformanceItem(**p) for p in performance],

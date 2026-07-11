@@ -4,10 +4,10 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
-from app.db.models.user import User
+from app.db.models.user import User, UserRole
 from app.db.session import get_db
 from app.dependencies.auth import get_current_user
-from app.dependencies.permissions import require_admin
+from app.dependencies.permissions import require_admin, resolve_employee_scope
 from app.schemas.dashboard import AdminReportResponse, EmployeeReportResponse
 from app.services.dashboard_service import ReportService
 
@@ -20,18 +20,28 @@ def employee_report(
     date_to: Optional[date] = Query(None, alias="dateTo"),
     stage: Optional[str] = None,
     source: Optional[str] = None,
+    employee_id: Optional[int] = Query(
+        None,
+        alias="employeeId",
+        description="Admin only: report for another employee",
+    ),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
     """
-    Employee report:
-    Leads Created, Leads Converted, Revenue Generated,
-    Conversion Rate, Follow-up Activity.
+    Employee report (scoped).
+    - Employee: always own report
+    - Admin: own by default, or ?employeeId=
     """
+    if current_user.role == UserRole.admin and employee_id is not None:
+        scoped_id = employee_id
+    else:
+        scoped_id = current_user.id
+
     try:
         return ReportService.employee_report(
             db,
-            employee_id=current_user.id,
+            employee_id=scoped_id,
             date_from=date_from,
             date_to=date_to,
             stage=stage,
@@ -78,10 +88,7 @@ def admin_report(
     current_user: User = Depends(require_admin),
 ):
     """
-    Admin reports:
-    Employee Performance Comparison, Sales by Month,
-    Sales by Employee, Lead Source Analysis, Win/Loss Analysis.
-    Filters: date range, employee, lead stage, lead source.
+    Admin reports — all data, or filter by employeeId / stage / source / dates.
     """
     return ReportService.admin_report(
         db,

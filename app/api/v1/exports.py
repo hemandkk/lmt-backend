@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 from app.db.models.user import User, UserRole
 from app.db.session import get_db
 from app.dependencies.auth import get_current_user
+from app.dependencies.permissions import resolve_employee_scope
 from app.services.export_service import ExportService
 
 router = APIRouter(prefix="/exports", tags=["Exports"])
@@ -33,10 +34,18 @@ def export_data(
     current_user: User = Depends(get_current_user),
 ):
     """
-    Export filtered data to Excel (.xlsx), CSV, or PDF.
-    Options: leads, employee_performance, sales, dashboard.
+    Export filtered data.
+    - Employee: always scoped to self
+    - Admin: all, or filter with employeeId
     """
     is_admin = current_user.role == UserRole.admin
+    scoped_employee_id = resolve_employee_scope(current_user, employee_id)
+
+    # Admin "all" exports keep employee_id=None; employees always get self
+    export_employee_id = scoped_employee_id
+    if is_admin and employee_id is None:
+        export_employee_id = None
+
     try:
         return ExportService.export(
             db,
@@ -44,11 +53,11 @@ def export_data(
             fmt=format,
             date_from=date_from,
             date_to=date_to,
-            employee_id=employee_id,
+            employee_id=export_employee_id,
             stage=stage,
             source=source,
             current_user_id=current_user.id,
-            is_admin=is_admin,
+            is_admin=is_admin and employee_id is None,
         )
     except ValueError as ex:
         raise HTTPException(status_code=400, detail=str(ex))

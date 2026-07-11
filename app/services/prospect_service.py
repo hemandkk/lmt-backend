@@ -1,5 +1,6 @@
 from math import ceil
 from typing import Any, Optional
+from uuid import uuid4
 
 from fastapi import UploadFile
 from sqlalchemy.orm import Session
@@ -26,6 +27,31 @@ class ProspectService:
     # ------------------------------------------------------------------
 
     @staticmethod
+    def _unique_code(
+        db: Session,
+        model,
+        field: str,
+        prefix: str,
+        digits: int = 5,
+    ) -> str:
+        """Code unique against DB rows and pending session objects."""
+        code = generate_id(db, model, field, prefix, digits=digits)
+        pending = {
+            getattr(obj, field)
+            for obj in db.new
+            if isinstance(obj, model)
+        }
+        attempts = 0
+        while code in pending or (
+            db.query(model).filter(getattr(model, field) == code).first()
+        ):
+            attempts += 1
+            code = f"{prefix}{uuid4().hex[:digits].upper()}"
+            if attempts > 20:
+                break
+        return code
+
+    @staticmethod
     def _resolve_prospect_code(
         db: Session,
         requested: Optional[str],
@@ -45,7 +71,9 @@ class ProspectService:
         prospect_code: Optional[str] = None,
     ) -> Payment:
         receipt_url = payment_in.receipt_url
-        payment_code = generate_id(db, Payment, "payment_id", "PAY")
+        payment_code = ProspectService._unique_code(
+            db, Payment, "payment_id", "PAY"
+        )
 
         if receipt_file and receipt_file.filename:
             folder = f"prospects/{prospect_code or 'temp'}/receipts"
@@ -80,7 +108,9 @@ class ProspectService:
         document_code = (
             existing.document_id
             if existing
-            else generate_id(db, ProspectDocument, "document_id", "DOC")
+            else ProspectService._unique_code(
+                db, ProspectDocument, "document_id", "DOC"
+            )
         )
 
         if existing and existing.file_url:
@@ -327,9 +357,15 @@ class ProspectService:
         page_size: int,
         search: str | None,
         stage: str | None,
+        assigned_to_id: int | None = None,
     ):
         items, total = ProspectRepository.list(
-            db, page, page_size, search, stage
+            db,
+            page,
+            page_size,
+            search,
+            stage,
+            assigned_to_id=assigned_to_id,
         )
         return {
             "items": items,

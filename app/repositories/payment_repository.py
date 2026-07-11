@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 from sqlalchemy import func
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, joinedload
 
 from app.db.models.payment import Payment
+from app.db.models.prospect import Prospect
 from app.schemas.payment import PaymentUpdate
 
 
@@ -20,6 +21,7 @@ class PaymentRepository:
     def get_by_id(self, payment_id: int) -> Payment | None:
         return (
             self.db.query(Payment)
+            .options(joinedload(Payment.prospect))
             .filter(Payment.id == payment_id)
             .first()
         )
@@ -39,11 +41,26 @@ class PaymentRepository:
             .all()
         )
 
-    def list(self, skip: int = 0, limit: int = 20) -> tuple[int, list[Payment]]:
-        total = self.db.query(func.count(Payment.id)).scalar() or 0
+    def list(
+        self,
+        skip: int = 0,
+        limit: int = 20,
+        assigned_to_id: int | None = None,
+        prospect_id: int | None = None,
+    ) -> tuple[int, list[Payment]]:
+        query = self.db.query(Payment).join(
+            Prospect, Prospect.id == Payment.prospect_id
+        )
+
+        if assigned_to_id is not None:
+            query = query.filter(Prospect.assigned_to_id == assigned_to_id)
+
+        if prospect_id is not None:
+            query = query.filter(Payment.prospect_id == prospect_id)
+
+        total = query.count()
         items = (
-            self.db.query(Payment)
-            .order_by(Payment.created_at.desc())
+            query.order_by(Payment.created_at.desc())
             .offset(skip)
             .limit(limit)
             .all()

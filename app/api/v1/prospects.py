@@ -1,5 +1,5 @@
 import json
-from typing import Optional
+from typing import Any, Optional
 
 from fastapi import (
     APIRouter,
@@ -9,18 +9,19 @@ from fastapi import (
     HTTPException,
     Query,
     Request,
-    UploadFile,
+    UploadFile as FastAPIUploadFile,
     status,
 )
 from pydantic import ValidationError
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.id_generator import generate_next_code
 from app.db.models.prospect import Prospect
 from app.db.models.prospect_document import DocumentType
-from app.db.models.user import User
+from app.db.models.user import User, UserRole
 from app.db.session import get_db
-from app.dependencies.auth import get_optional_user
+from app.dependencies.auth import get_current_user, get_optional_user
 from app.schemas.prospect import (
     ProspectCreate,
     ProspectListResponse,
@@ -35,6 +36,43 @@ router = APIRouter(
 )
 
 DOC_TYPES = {item.value for item in DocumentType}
+
+
+def _is_upload(value: Any) -> bool:
+    """True for Starlette/FastAPI upload file objects."""
+    return hasattr(value, "filename") and hasattr(value, "file")
+
+# Flat form field names the frontend may send (camelCase + snake_case)
+LEAD_FORM_FIELDS = {
+    "name",
+    "email",
+    "phone",
+    "password",
+    "prospect_id",
+    "prospectId",
+    "fatherName",
+    "father_name",
+    "motherName",
+    "mother_name",
+    "dob",
+    "courseId",
+    "course_id",
+    "specialization",
+    "address",
+    "deliveryAddress",
+    "delivery_address",
+    "deliveryDate",
+    "delivery_date",
+    "estimatedValue",
+    "estimated_deal_value",
+    "notes",
+    "assignedToId",
+    "assigned_to_id",
+    "source",
+    "followUpDate",
+    "follow_up_date",
+    "stage",
+}
 
 
 def _parse_json_payload(raw: str, model_cls):
@@ -55,18 +93,32 @@ def _parse_json_payload(raw: str, model_cls):
         ) from exc
 
 
+def _maybe_parse_json_value(value: Any) -> Any:
+    if not isinstance(value, str):
+        return value
+    text = value.strip()
+    if not text:
+        return value
+    if text[0] in "[{":
+        try:
+            return json.loads(text)
+        except json.JSONDecodeError:
+            return value
+    return value
+
+
 def _extract_document_files(
-    form_files: list[tuple[str, UploadFile]],
-) -> dict[str, UploadFile]:
+    form_files: list[tuple[str, Any]],
+) -> dict[str, Any]:
     """
     Accepts:
       document_aadhaar, document_photo, ...
       documents[aadhaar], doc_aadhaar
       or field name equal to doc type
     """
-    mapping: dict[str, UploadFile] = {}
+    mapping: dict[str, Any] = {}
     for field_name, upload in form_files:
-        if not upload or not upload.filename:
+        if not _is_upload(upload) or not upload.filename:
             continue
         name = field_name.strip()
         key = None
@@ -82,15 +134,15 @@ def _extract_document_files(
 
 
 def _extract_receipt_files(
-    form_files: list[tuple[str, UploadFile]],
-) -> dict[int, UploadFile]:
+    form_files: list[tuple[str, Any]],
+) -> dict[int, Any]:
     """
     Accepts:
       receipt_0, receipt_1, receipts[0], payment_receipt_0
     """
-    mapping: dict[int, UploadFile] = {}
+    mapping: dict[int, Any] = {}
     for field_name, upload in form_files:
-        if not upload or not upload.filename:
+        if not _is_upload(upload) or not upload.filename:
             continue
         name = field_name.strip()
         index = None
@@ -103,6 +155,131 @@ def _extract_receipt_files(
         if index is not None:
             mapping[index] = upload
     return mapping
+
+
+def _pair_documents_with_doctypes(form) -> dict[str, Any]:
+    """
+    Frontend pattern:
+      documents: <file>, docTypes: aadhaar
+      documents: <file>, docTypes: photo
+    (or all documents then all docTypes — paired by index)
+    """
+    document_files: list[Any] = []
+    doc_types: list[str] = []
+
+    for key, value in form.multi_items():
+        if key in ("documents", "document") and _is_upload(value):
+            if value.filename:
+                document_files.append(value)
+        elif key in ("docTypes", "docType", "document_types", "documentTypes"):
+            if isinstance(value, str) and value.strip():
+                doc_types.append(value.strip())
+            elif _is_upload(value):
+                raw = value.file.read()
+                try:
+                    value.file.seek(0)
+                except Exception:
+                    pass
+                text = (
+                    raw.decode("utf-8", errors="ignore").strip()
+                    if isinstance(raw, (bytes, bytearray))
+                    else str(raw).strip()
+                )
+                if text:
+                    doc_types.append(text)
+
+    mapping: dict[str, Any] = {}
+    for index, upload in enumerate(document_files):
+        if index >= len(doc_types):
+            break
+        doc_type = doc_types[index]
+        if doc_type in DOC_TYPES:
+            mapping[doc_type] = upload
+    return mapping
+
+
+def _build_lead_from_flat_form(form, model_cls):
+    """
+    Build ProspectCreate/ProspectUpdate from flat multipart fields
+    (name, email, courseId, payments JSON string, etc.).
+    """
+    data: dict[str, Any] = {}
+
+    for key in LEAD_FORM_FIELDS:
+        if key not in form:
+            continue
+        value = form.get(key)
+        if _is_upload(value):
+            continue
+        if value is None:
+            continue
+        if isinstance(value, str) and value.strip() == "":
+            # keep empty password as "" so validator can null it
+            if key != "password":
+                continue
+        data[key] = value
+
+    # payments may be JSON string "[]" or object list
+    if "payments" in form:
+        payments_raw = form.get("payments")
+        if isinstance(payments_raw, str):
+            data["payments"] = _maybe_parse_json_value(payments_raw)
+        elif payments_raw is not None and not _is_upload(payments_raw):
+            data["payments"] = payments_raw
+
+    # documents metadata JSON (optional)
+    if "documentsMeta" in form or "documents_meta" in form:
+        meta_raw = form.get("documentsMeta") or form.get("documents_meta")
+        if isinstance(meta_raw, str):
+            data["documents"] = _maybe_parse_json_value(meta_raw)
+
+    try:
+        return model_cls.model_validate(data)
+    except ValidationError as exc:
+        raise HTTPException(status_code=422, detail=exc.errors()) from exc
+
+
+def _parse_multipart_lead(form, model_cls):
+    """
+    Supports:
+      1) payload/data = JSON string (preferred compact format)
+      2) flat form fields from the lead screen + documents/docTypes files
+    """
+    raw_payload = form.get("payload") or form.get("data")
+    if isinstance(raw_payload, str) and raw_payload.strip():
+        payload = _parse_json_payload(raw_payload, model_cls)
+    else:
+        payload = _build_lead_from_flat_form(form, model_cls)
+
+    uploads = [
+        (key, value)
+        for key, value in form.multi_items()
+        if _is_upload(value)
+    ]
+
+    document_files = _extract_document_files(uploads)
+    # Merge frontend documents[] + docTypes[] pairing
+    document_files.update(_pair_documents_with_doctypes(form))
+    receipt_files = _extract_receipt_files(uploads)
+
+    return payload, document_files, receipt_files
+
+
+def _employee_scope_id(user: User) -> int | None:
+    """Employees only see their own leads; admins see all."""
+    if user.role == UserRole.employee:
+        return user.id
+    return None
+
+
+def _ensure_prospect_access(prospect, user: User) -> None:
+    if user.role == UserRole.admin:
+        return
+    if prospect.assigned_to_id != user.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You do not have access to this prospect.",
+        )
 
 
 @router.get("/utility/next-prospect-id")
@@ -129,15 +306,41 @@ def list_prospects(
     page_size: int = Query(20, alias="pageSize", ge=1, le=100),
     search: str | None = None,
     stage: str | None = None,
+    assigned_to_id: int | None = Query(None, alias="assignedToId"),
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
-    return ProspectService.list(db, page, page_size, search, stage)
+    """
+    Admin: all prospects (optional assignedToId filter).
+    Employee: only prospects assigned to the logged-in user.
+    """
+    scope_id = _employee_scope_id(current_user)
+    if scope_id is not None:
+        # Employees cannot override scope
+        assigned_to_id = scope_id
+    elif assigned_to_id is None:
+        assigned_to_id = None  # admin sees all
+
+    return ProspectService.list(
+        db,
+        page,
+        page_size,
+        search,
+        stage,
+        assigned_to_id=assigned_to_id,
+    )
 
 
 @router.get("/{prospect_id}", response_model=ProspectResponse)
-def get_prospect(prospect_id: int, db: Session = Depends(get_db)):
+def get_prospect(
+    prospect_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
     try:
-        return ProspectService.get(db, prospect_id)
+        prospect = ProspectService.get(db, prospect_id)
+        _ensure_prospect_access(prospect, current_user)
+        return prospect
     except ValueError as ex:
         raise HTTPException(status_code=404, detail=str(ex))
 
@@ -154,11 +357,11 @@ async def create_prospect(
 ):
     """
     Create lead.
-    - application/json: body = ProspectCreate (payments inline, no files)
-    - multipart/form-data:
-        payload: JSON string of ProspectCreate (camelCase OK)
-        document_aadhaar / document_photo / ... : files
-        receipt_0 / receipt_1 / ... : payment receipt files
+    - application/json: ProspectCreate body
+    - multipart/form-data (either):
+        A) payload=<JSON> + document_aadhaar/receipt_0 files
+        B) flat fields (name, email, courseId, ...) +
+           documents[] files paired with docTypes[]
     """
     content_type = (request.headers.get("content-type") or "").lower()
     actor_id = current_user.id if current_user else None
@@ -166,34 +369,47 @@ async def create_prospect(
     try:
         if "multipart/form-data" in content_type:
             form = await request.form()
-            raw_payload = form.get("payload") or form.get("data")
-            if not raw_payload or not isinstance(raw_payload, str):
-                raise HTTPException(
-                    status_code=400,
-                    detail="multipart create requires form field 'payload' (JSON string).",
-                )
-            payload = _parse_json_payload(raw_payload, ProspectCreate)
-            uploads = [
-                (key, value)
-                for key, value in form.multi_items()
-                if isinstance(value, UploadFile)
-            ]
+            payload, document_files, receipt_files = _parse_multipart_lead(
+                form, ProspectCreate
+            )
+
+            # Auto-assign to logged-in employee if not provided
+            if (
+                current_user
+                and current_user.role == UserRole.employee
+                and not payload.assigned_to_id
+            ):
+                payload.assigned_to_id = current_user.id
+
             return ProspectService.create(
                 db,
                 payload,
                 actor_id=actor_id,
-                document_files=_extract_document_files(uploads),
-                receipt_files=_extract_receipt_files(uploads),
+                document_files=document_files,
+                receipt_files=receipt_files,
             )
 
         body = await request.json()
         payload = ProspectCreate.model_validate(body)
+        if (
+            current_user
+            and current_user.role == UserRole.employee
+            and not payload.assigned_to_id
+        ):
+            payload.assigned_to_id = current_user.id
+
         return ProspectService.create(db, payload, actor_id=actor_id)
 
     except HTTPException:
         raise
     except ValidationError as ex:
         raise HTTPException(status_code=422, detail=ex.errors())
+    except IntegrityError as ex:
+        db.rollback()
+        raise HTTPException(
+            status_code=400,
+            detail="Could not create lead (duplicate or invalid data).",
+        ) from ex
     except ValueError as ex:
         raise HTTPException(status_code=400, detail=str(ex))
 
@@ -203,41 +419,53 @@ async def update_prospect(
     prospect_id: int,
     request: Request,
     db: Session = Depends(get_db),
-    current_user: Optional[User] = Depends(get_optional_user),
+    current_user: User = Depends(get_current_user),
 ):
     """
-    Edit lead (also used from list more-actions → edit).
-    Supports JSON and multipart (same shape as create).
+    Edit lead. Supports same JSON / multipart formats as create.
     """
     content_type = (request.headers.get("content-type") or "").lower()
-    actor_id = current_user.id if current_user else None
+    actor_id = current_user.id
 
     try:
+        existing = ProspectService.get(db, prospect_id)
+        _ensure_prospect_access(existing, current_user)
+
         if "multipart/form-data" in content_type:
             form = await request.form()
-            raw_payload = form.get("payload") or form.get("data")
-            if not raw_payload or not isinstance(raw_payload, str):
+            payload, document_files, receipt_files = _parse_multipart_lead(
+                form, ProspectUpdate
+            )
+            # Employees cannot reassign leads to someone else
+            if (
+                current_user.role == UserRole.employee
+                and payload.assigned_to_id is not None
+                and payload.assigned_to_id != current_user.id
+            ):
                 raise HTTPException(
-                    status_code=400,
-                    detail="multipart update requires form field 'payload' (JSON string).",
+                    status_code=403,
+                    detail="Employees cannot reassign leads.",
                 )
-            payload = _parse_json_payload(raw_payload, ProspectUpdate)
-            uploads = [
-                (key, value)
-                for key, value in form.multi_items()
-                if isinstance(value, UploadFile)
-            ]
             return ProspectService.update(
                 db,
                 prospect_id,
                 payload,
                 actor_id=actor_id,
-                document_files=_extract_document_files(uploads),
-                receipt_files=_extract_receipt_files(uploads),
+                document_files=document_files,
+                receipt_files=receipt_files,
             )
 
         body = await request.json()
         payload = ProspectUpdate.model_validate(body)
+        if (
+            current_user.role == UserRole.employee
+            and payload.assigned_to_id is not None
+            and payload.assigned_to_id != current_user.id
+        ):
+            raise HTTPException(
+                status_code=403,
+                detail="Employees cannot reassign leads.",
+            )
         return ProspectService.update(
             db, prospect_id, payload, actor_id=actor_id
         )
@@ -246,6 +474,12 @@ async def update_prospect(
         raise
     except ValidationError as ex:
         raise HTTPException(status_code=422, detail=ex.errors())
+    except IntegrityError as ex:
+        db.rollback()
+        raise HTTPException(
+            status_code=400,
+            detail="Could not update lead (duplicate or invalid data).",
+        ) from ex
     except ValueError as ex:
         raise HTTPException(status_code=404, detail=str(ex))
 
@@ -257,7 +491,7 @@ async def update_prospect(
 async def upload_lead_document(
     prospect_id: int,
     doc_type: DocumentType,
-    file: UploadFile = File(...),
+    file: FastAPIUploadFile = File(...),
     remarks: Optional[str] = Form(None),
     db: Session = Depends(get_db),
     current_user: Optional[User] = Depends(get_optional_user),
@@ -299,7 +533,7 @@ async def add_lead_payment(
 
     content_type = (request.headers.get("content-type") or "").lower()
     actor_id = current_user.id if current_user else None
-    receipt_files: dict[int, UploadFile] = {}
+    receipt_files: dict[int, Any] = {}
 
     try:
         if "multipart/form-data" in content_type:
@@ -314,7 +548,7 @@ async def add_lead_payment(
             uploads = [
                 (k, v)
                 for k, v in form.multi_items()
-                if isinstance(v, UploadFile)
+                if _is_upload(v)
             ]
             # Single receipt may be named "receipt" or "receipt_0"
             for name, upload in uploads:
@@ -345,13 +579,15 @@ async def add_lead_payment(
 def delete_prospect(
     prospect_id: int,
     db: Session = Depends(get_db),
-    current_user: Optional[User] = Depends(get_optional_user),
+    current_user: User = Depends(get_current_user),
 ):
     try:
+        prospect = ProspectService.get(db, prospect_id)
+        _ensure_prospect_access(prospect, current_user)
         ProspectService.delete(
             db,
             prospect_id,
-            actor_id=current_user.id if current_user else None,
+            actor_id=current_user.id,
         )
     except ValueError as ex:
         raise HTTPException(status_code=404, detail=str(ex))
@@ -362,14 +598,16 @@ def update_stage(
     prospect_id: int,
     stage: str,
     db: Session = Depends(get_db),
-    current_user: Optional[User] = Depends(get_optional_user),
+    current_user: User = Depends(get_current_user),
 ):
     try:
+        prospect = ProspectService.get(db, prospect_id)
+        _ensure_prospect_access(prospect, current_user)
         return ProspectService.change_stage(
             db,
             prospect_id,
             stage,
-            actor_id=current_user.id if current_user else None,
+            actor_id=current_user.id,
         )
     except ValueError as ex:
         raise HTTPException(status_code=404, detail=str(ex))

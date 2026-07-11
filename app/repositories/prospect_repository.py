@@ -58,10 +58,14 @@ class ProspectRepository:
         page_size: int,
         search: str | None = None,
         stage: str | None = None,
+        assigned_to_id: int | None = None,
     ):
         query = db.query(Prospect).options(
             *ProspectRepository._with_relations()
         )
+
+        if assigned_to_id is not None:
+            query = query.filter(Prospect.assigned_to_id == assigned_to_id)
 
         if search:
             pattern = f"%{search}%"

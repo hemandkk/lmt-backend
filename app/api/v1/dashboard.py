@@ -1,13 +1,13 @@
 from datetime import date
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
 from app.db.models.user import User, UserRole
 from app.db.session import get_db
 from app.dependencies.auth import get_current_user
-from app.dependencies.permissions import require_admin
+from app.dependencies.permissions import require_admin, resolve_employee_scope
 from app.schemas.dashboard import (
     AdminDashboardResponse,
     EmployeeDashboardResponse,
@@ -21,23 +21,27 @@ router = APIRouter(prefix="/dashboard", tags=["Dashboard"])
 def employee_dashboard(
     date_from: Optional[date] = Query(None, alias="dateFrom"),
     date_to: Optional[date] = Query(None, alias="dateTo"),
+    employee_id: Optional[int] = Query(
+        None,
+        alias="employeeId",
+        description="Admin only: view a specific employee's dashboard",
+    ),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
     """
-    Employee dashboard:
-    - Lead counts (total, today, this week, this month, custom range)
-    - Payment status (advance / 50% / 100% paid)
-    - Payment collected (today, week, month, total, custom range)
+    Scoped employee dashboard.
+    - Employee: always own data
+    - Admin: own data by default, or ?employeeId= for another employee
     """
-    employee_id = current_user.id
-    if current_user.role == UserRole.admin:
-        # Admin can view own empty employee view; use assigned scope of self
-        employee_id = current_user.id
+    if current_user.role == UserRole.admin and employee_id is not None:
+        scoped_id = employee_id
+    else:
+        scoped_id = current_user.id
 
     return DashboardService.employee_dashboard(
         db,
-        employee_id=employee_id,
+        employee_id=scoped_id,
         date_from=date_from,
         date_to=date_to,
     )
@@ -67,17 +71,20 @@ def employee_dashboard_by_id(
 def admin_dashboard(
     date_from: Optional[date] = Query(None, alias="dateFrom"),
     date_to: Optional[date] = Query(None, alias="dateTo"),
+    employee_id: Optional[int] = Query(
+        None,
+        alias="employeeId",
+        description="Optional: filter all KPIs to one employee",
+    ),
     db: Session = Depends(get_db),
     current_user: User = Depends(require_admin),
 ):
     """
-    Admin dashboard KPIs and chart data:
-    Total Employees, Total Leads, Total Revenue,
-    Leads by Stage, Employee-wise Performance,
-    Monthly Sales Trend, Top Performers.
+    Admin dashboard. View all, or filter with ?employeeId=.
     """
     return DashboardService.admin_dashboard(
         db,
         date_from=date_from,
         date_to=date_to,
+        employee_id=employee_id,
     )

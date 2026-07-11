@@ -6,19 +6,17 @@ from fastapi import (
 
 from sqlalchemy.orm import Session
 
+from app.db.models.user import User
 from app.db.session import get_db
-from app.dependencies.auth import (
-    get_current_user,
-)
+from app.dependencies.auth import get_current_user
+from app.dependencies.permissions import require_admin
 from app.schemas.master import (
     CourseCreate,
     CourseResponse,
     IncentiveSlabResponse,
     UpdateIncentiveSlabsRequest,
 )
-from app.services.master_service import (
-    MasterService,
-)
+from app.services.master_service import MasterService
 
 router = APIRouter(
     prefix="/masters",
@@ -27,7 +25,8 @@ router = APIRouter(
 
 
 # ==========================================================
-# Courses
+# Courses — all authenticated users can read;
+# create/delete are admin-only
 # ==========================================================
 
 @router.get(
@@ -36,9 +35,8 @@ router = APIRouter(
 )
 def get_courses(
     db: Session = Depends(get_db),
-    user=Depends(get_current_user),
+    user: User = Depends(get_current_user),
 ):
-
     return MasterService.get_courses(db)
 
 
@@ -49,72 +47,49 @@ def get_courses(
 def create_course(
     payload: CourseCreate,
     db: Session = Depends(get_db),
-    user=Depends(get_current_user),
+    user: User = Depends(require_admin),
 ):
-
     try:
-        return MasterService.create_course(
-            db,
-            payload,
-        )
-
+        return MasterService.create_course(db, payload)
     except ValueError as ex:
-
-        raise HTTPException(
-            status_code=400,
-            detail=str(ex),
-        )
+        raise HTTPException(status_code=400, detail=str(ex))
 
 
-@router.delete(
-    "/courses/{course_id}",
-)
+@router.delete("/courses/{course_id}")
 def delete_course(
     course_id: int,
     db: Session = Depends(get_db),
-    user=Depends(get_current_user),
+    user: User = Depends(require_admin),
 ):
     try:
         MasterService.delete_course(db, course_id)
     except ValueError as ex:
         raise HTTPException(status_code=404, detail=str(ex))
-
     return {"message": "Course deleted."}
 
 
 # ==========================================================
-# Incentive Slabs
+# Incentive slabs — all can read; only admin can update
 # ==========================================================
 
 @router.get(
     "/incentive-slabs",
-    response_model=list[
-        IncentiveSlabResponse
-    ],
+    response_model=list[IncentiveSlabResponse],
 )
 def get_incentive_slabs(
     db: Session = Depends(get_db),
-    user=Depends(get_current_user),
+    user: User = Depends(get_current_user),
 ):
-
-    return MasterService.get_incentive_slabs(
-        db,
-    )
+    return MasterService.get_incentive_slabs(db)
 
 
 @router.put(
     "/incentive-slabs",
-    response_model=list[
-        IncentiveSlabResponse
-    ],
+    response_model=list[IncentiveSlabResponse],
 )
 def update_incentive_slabs(
     payload: UpdateIncentiveSlabsRequest,
     db: Session = Depends(get_db),
-    user=Depends(get_current_user),
+    user: User = Depends(require_admin),
 ):
-
-    return MasterService.update_incentive_slabs(
-        db,
-        payload,
-    )
+    return MasterService.update_incentive_slabs(db, payload)
