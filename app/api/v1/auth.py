@@ -21,7 +21,6 @@ from app.services.auth_service import (
 from app.repositories.user_repository import (
     UserRepository,
 )
-from app.core.security import hash_password
 
 from app.core.security import (
     create_access_token,
@@ -40,14 +39,11 @@ def login(
     payload: LoginRequest,
     db: Session = Depends(get_db),
 ):
-
     result = AuthService.login(
         db,
         payload.username,
         payload.password,
     )
-    print("###########")
-    print(result)
     if not result:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -81,10 +77,7 @@ def refresh(
     payload: RefreshRequest,
     db: Session = Depends(get_db),
 ):
-
-    claims = decode_token(
-        payload.refresh_token
-    )
+    claims = decode_token(payload.refresh_token)
 
     if claims["type"] != "refresh":
         raise HTTPException(
@@ -96,6 +89,11 @@ def refresh(
         db,
         int(claims["sub"]),
     )
+    if not user:
+        raise HTTPException(
+            status_code=401,
+            detail="Invalid token",
+        )
 
     access_token = create_access_token(
         {

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from datetime import date
 from typing import Any
 
 from fastapi import (
@@ -27,6 +28,7 @@ from app.schemas.payment import (
     PaymentCreate,
     PaymentListResponse,
     PaymentResponse,
+    PaymentSummaryResponse,
     PaymentUpdate,
     ReceiptUploadResponse,
 )
@@ -60,12 +62,6 @@ async def create_payment(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """
-    Create a payment.
-    - JSON body (snake_case or camelCase)
-    - multipart/form-data from listing more-action:
-      prospectId, amount, paymentType, paymentDate, notes, receipt
-    """
     content_type = (request.headers.get("content-type") or "").lower()
     receipt_file: UploadFile | None = None
 
@@ -95,7 +91,6 @@ async def create_payment(
                 ),
                 "notes": _form_value(form, "notes"),
             }
-            # Drop unset optionals so defaults apply
             payload = {k: v for k, v in payload.items() if v is not None}
 
             for name, value in form.multi_items():
@@ -138,10 +133,6 @@ def list_payments(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    """
-    - Employee: only payments on their assigned prospects
-    - Admin: all, or filter with employeeId / prospectId
-    """
     scoped_employee_id = resolve_employee_scope(current_user, employee_id)
     service = PaymentService(db)
     total, items = service.list_payments(
@@ -151,6 +142,30 @@ def list_payments(
         prospect_id=prospect_id,
     )
     return {"total": total, "items": items}
+
+
+@router.get("/summary", response_model=PaymentSummaryResponse)
+def payments_summary(
+    date_from: date | None = Query(None, alias="dateFrom"),
+    date_to: date | None = Query(None, alias="dateTo"),
+    employee_id: int | None = Query(None, alias="employeeId"),
+    prospect_id: int | None = Query(None, alias="prospectId"),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Payment KPIs. Declared before /{payment_id} so 'summary' is not treated as an id.
+    """
+    scoped_employee_id = resolve_employee_scope(current_user, employee_id)
+    if prospect_id is not None:
+        ensure_prospect_access(db, prospect_id, current_user)
+
+    return PaymentService(db).get_summary(
+        assigned_to_id=scoped_employee_id,
+        prospect_id=prospect_id,
+        date_from=date_from,
+        date_to=date_to,
+    )
 
 
 @router.get("/prospect/{prospect_id}", response_model=list[PaymentResponse])

@@ -1,15 +1,26 @@
 from __future__ import annotations
 
+from datetime import date
+from decimal import Decimal
+
 from fastapi import UploadFile
 from sqlalchemy.orm import Session
 
 from app.core.file_storage import FileStorage
 from app.core.id_generator import generate_id
 from app.db.models.payment import Payment
-from app.db.models.prospect import Prospect
+from app.repositories.analytics_repository import AnalyticsRepository
 from app.repositories.payment_repository import PaymentRepository
 from app.repositories.prospect_repository import ProspectRepository
-from app.schemas.payment import PaymentCreate, PaymentUpdate
+from app.schemas.payment import (
+    PaymentCollectedBreakdown,
+    PaymentCreate,
+    PaymentLeadStatusBreakdown,
+    PaymentStatusBreakdown,
+    PaymentSummaryResponse,
+    PaymentTypeBreakdown,
+    PaymentUpdate,
+)
 
 
 class PaymentService:
@@ -90,6 +101,48 @@ class PaymentService:
 
     def get_payments_by_prospect(self, prospect_id: int):
         return self.payment_repo.get_by_prospect(prospect_id)
+
+    def get_summary(
+        self,
+        assigned_to_id: int | None = None,
+        prospect_id: int | None = None,
+        date_from: date | None = None,
+        date_to: date | None = None,
+    ) -> PaymentSummaryResponse:
+        breakdown = self.payment_repo.summary_breakdown(
+            assigned_to_id=assigned_to_id,
+            prospect_id=prospect_id,
+            date_from=date_from,
+            date_to=date_to,
+        )
+        collected = AnalyticsRepository.payment_collected_summary(
+            self.db,
+            employee_id=assigned_to_id,
+            custom_from=date_from,
+            custom_to=date_to,
+        )
+        lead_status = AnalyticsRepository.payment_status_summary(
+            self.db, employee_id=assigned_to_id
+        )
+        by_type = breakdown["by_type"]
+        by_status = breakdown["by_status"]
+
+        return PaymentSummaryResponse(
+            total_collected=breakdown["total_collected"],
+            total_count=breakdown["total_count"],
+            collected=PaymentCollectedBreakdown(**collected),
+            by_type=PaymentTypeBreakdown(
+                advance=by_type.get("advance", Decimal("0")),
+                installment=by_type.get("installment", Decimal("0")),
+                full=by_type.get("full", Decimal("0")),
+            ),
+            by_status=PaymentStatusBreakdown(
+                completed=by_status.get("completed", Decimal("0")),
+                pending=by_status.get("pending", Decimal("0")),
+                failed=by_status.get("failed", Decimal("0")),
+            ),
+            lead_payment_status=PaymentLeadStatusBreakdown(**lead_status),
+        )
 
     def update_payment(
         self, payment_id: int, payment_in: PaymentUpdate

@@ -6,7 +6,7 @@ from app.core.config import settings
 
 pwd_context = CryptContext(
     schemes=["bcrypt"],
-    deprecated="auto"
+    deprecated="auto",
 )
 
 ALGORITHM = "HS256"
@@ -16,17 +16,13 @@ def hash_password(password: str) -> str:
     return pwd_context.hash(password)
 
 
-def verify_password(
-    plain_password: str,
-    hashed_password: str
-) -> bool:
-    print("Plain:", repr(plain_password))
-    print("Hash :", repr(hashed_password))
-    print("Type :", type(hashed_password))
-    return pwd_context.verify(
-        plain_password,
-        hashed_password
-    )
+def verify_password(plain_password: str, hashed_password: str) -> bool:
+    if not plain_password or not hashed_password:
+        return False
+    try:
+        return pwd_context.verify(plain_password, hashed_password)
+    except Exception:
+        return False
 
 
 def create_access_token(data: dict):
@@ -35,15 +31,13 @@ def create_access_token(data: dict):
     payload["type"] = "access"
     payload["exp"] = (
         datetime.now(timezone.utc)
-        + timedelta(
-            minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES
-        )
+        + timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
     )
 
     return jwt.encode(
         payload,
         settings.SECRET_KEY,
-        algorithm=ALGORITHM
+        algorithm=ALGORITHM,
     )
 
 
@@ -52,16 +46,14 @@ def create_refresh_token(data: dict):
 
     payload["type"] = "refresh"
     payload["exp"] = (
-         datetime.now(timezone.utc)
-        + timedelta(
-            days=settings.REFRESH_TOKEN_EXPIRE_DAYS
-        )
+        datetime.now(timezone.utc)
+        + timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS)
     )
 
     return jwt.encode(
         payload,
         settings.SECRET_KEY,
-        algorithm=ALGORITHM
+        algorithm=ALGORITHM,
     )
 
 
@@ -69,5 +61,5 @@ def decode_token(token: str):
     return jwt.decode(
         token,
         settings.SECRET_KEY,
-        algorithms=[ALGORITHM]
+        algorithms=[ALGORITHM],
     )

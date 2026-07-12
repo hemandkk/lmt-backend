@@ -154,3 +154,58 @@ class PaymentListResponse(BaseModel):
     total: int
 
     items: list[PaymentResponse]
+
+
+class PaymentTypeBreakdown(BaseModel):
+    model_config = _alias_config()
+
+    advance: Decimal = Decimal("0")
+    installment: Decimal = Decimal("0")
+    full: Decimal = Decimal("0")
+
+
+class PaymentStatusBreakdown(BaseModel):
+    model_config = _alias_config()
+
+    completed: Decimal = Decimal("0")
+    pending: Decimal = Decimal("0")
+    failed: Decimal = Decimal("0")
+
+
+class PaymentCollectedBreakdown(BaseModel):
+    model_config = _alias_config()
+
+    today: Decimal = Decimal("0")
+    this_week: Decimal = Field(default=Decimal("0"), serialization_alias="thisWeek")
+    this_month: Decimal = Field(
+        default=Decimal("0"), serialization_alias="thisMonth"
+    )
+    total: Decimal = Decimal("0")
+    custom: Optional[Decimal] = None
+
+
+class PaymentLeadStatusBreakdown(BaseModel):
+    model_config = _alias_config()
+
+    advanced_paid: int = Field(default=0, serialization_alias="advancedPaid")
+    fifty_percent_paid: int = Field(
+        default=0, serialization_alias="fiftyPercentPaid"
+    )
+    hundred_percent_paid: int = Field(
+        default=0, serialization_alias="hundredPercentPaid"
+    )
+
+
+class PaymentSummaryResponse(BaseModel):
+    model_config = _alias_config()
+
+    total_collected: Decimal = Field(
+        default=Decimal("0"), serialization_alias="totalCollected"
+    )
+    total_count: int = Field(default=0, serialization_alias="totalCount")
+    collected: PaymentCollectedBreakdown
+    by_type: PaymentTypeBreakdown = Field(serialization_alias="byType")
+    by_status: PaymentStatusBreakdown = Field(serialization_alias="byStatus")
+    lead_payment_status: PaymentLeadStatusBreakdown = Field(
+        serialization_alias="leadPaymentStatus"
+    )

@@ -1,3 +1,4 @@
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.db.models.user import User
@@ -10,9 +11,11 @@ class UserRepository:
         db: Session,
         email: str
     ):
+        if not email:
+            return None
         return (
             db.query(User)
-            .filter(User.email == email)
+            .filter(func.lower(User.email) == email.strip().lower())
             .first()
         )
 
@@ -21,10 +24,12 @@ class UserRepository:
         db: Session,
         employee_id: str
     ):
+        if not employee_id:
+            return None
         return (
             db.query(User)
             .filter(
-                User.employee_id == employee_id
+                func.lower(User.employee_id) == employee_id.strip().lower()
             )
             .first()
         )
