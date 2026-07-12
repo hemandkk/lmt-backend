@@ -11,14 +11,17 @@ from app.schemas.dashboard import (
     EmployeeDashboardResponse,
     EmployeeOverviewItem,
     EmployeePerformanceItem,
+    EmployeePerformanceReportResponse,
     EmployeeReportResponse,
     ExamStatsSummary,
     IncentiveStatusSummary,
     LeadCountSummary,
     LeadSourceItem,
+    LeadsByStageReportResponse,
     MonthlySalesItem,
     PaymentCollectedSummary,
     PaymentStatusSummary,
+    RevenueReportResponse,
     SalesByEmployeeItem,
     SalesByMonthItem,
     StageCountItem,
@@ -459,4 +462,108 @@ class ReportService:
             win_loss_analysis=WinLossItem(**win_loss),
             employees=employees,
             employee_reports=employee_reports,
+        )
+
+    @staticmethod
+    def revenue_report(
+        db: Session,
+        date_from: Optional[date] = None,
+        date_to: Optional[date] = None,
+        employee_id: Optional[int] = None,
+    ) -> RevenueReportResponse:
+        collected = AnalyticsRepository.payment_collected_summary(
+            db,
+            employee_id=employee_id,
+            custom_from=date_from,
+            custom_to=date_to,
+        )
+        monthly = AnalyticsRepository.monthly_sales(
+            db,
+            employee_id=employee_id,
+            date_from=date_from,
+            date_to=date_to,
+        )
+        performance = AnalyticsRepository.employee_performance(
+            db,
+            date_from=date_from,
+            date_to=date_to,
+            employee_id=employee_id,
+        )
+        enriched = _enrich_performance(db, performance)
+        return RevenueReportResponse(
+            total_revenue=AnalyticsRepository.payment_collected(
+                db,
+                employee_id=employee_id,
+                date_from=date_from,
+                date_to=date_to,
+            ),
+            payment_collected=PaymentCollectedSummary(**collected),
+            sales_by_month=[
+                SalesByMonthItem(
+                    month=m["month"],
+                    year=m["year"],
+                    revenue=m["revenue"],
+                    deals=m.get("deals", 0),
+                )
+                for m in monthly
+            ],
+            sales_by_employee=[
+                SalesByEmployeeItem(
+                    employee_id=p.employee_id,
+                    employee_name=p.employee_name,
+                    revenue=p.revenue,
+                    deals=p.leads_converted,
+                    target_achieved=p.target_achieved,
+                    monthly_target=p.monthly_target,
+                    target_status=p.target_status,
+                    target_assigned=p.target_assigned,
+                    target_source=p.target_source,
+                    incentive_amount=p.incentive_amount,
+                )
+                for p in enriched
+            ],
+        )
+
+    @staticmethod
+    def employee_performance_report(
+        db: Session,
+        date_from: Optional[date] = None,
+        date_to: Optional[date] = None,
+        employee_id: Optional[int] = None,
+        stage: Optional[str] = None,
+        source: Optional[str] = None,
+    ) -> EmployeePerformanceReportResponse:
+        performance = AnalyticsRepository.employee_performance(
+            db,
+            date_from=date_from,
+            date_to=date_to,
+            employee_id=employee_id,
+            stage=stage,
+            source=source,
+        )
+        items = _enrich_performance(db, performance)
+        return EmployeePerformanceReportResponse(
+            items=items,
+            total=len(items),
+        )
+
+    @staticmethod
+    def leads_by_stage_report(
+        db: Session,
+        date_from: Optional[date] = None,
+        date_to: Optional[date] = None,
+        employee_id: Optional[int] = None,
+        source: Optional[str] = None,
+    ) -> LeadsByStageReportResponse:
+        stages = AnalyticsRepository.leads_by_stage(
+            db,
+            employee_id=employee_id,
+            date_from=date_from,
+            date_to=date_to,
+            source=source,
+        )
+        items = [StageCountItem(**s) for s in stages]
+        return LeadsByStageReportResponse(
+            items=items,
+            total=sum(i.count for i in items),
         )

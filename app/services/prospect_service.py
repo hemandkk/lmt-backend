@@ -348,6 +348,15 @@ class ProspectService:
                 db, created, actor_id=actor_id
             )
 
+        # Reload with relations for Sheets row (course, assignee, documents)
+        created = ProspectRepository.get_by_id(db, created.id)
+
+        from app.services.google_sheets_service import GoogleSheetsService
+
+        created = GoogleSheetsService.sync_prospect(
+            db, created, actor_id=actor_id
+        )
+
         return ProspectRepository.get_by_id(db, created.id)
 
     @staticmethod
@@ -462,7 +471,20 @@ class ProspectService:
                     actor_id=actor_id,
                 )
 
-        return updated
+        return ProspectService._after_change_sync(db, updated.id, actor_id)
+
+    @staticmethod
+    def _after_change_sync(
+        db: Session,
+        prospect_id: int,
+        actor_id: Optional[int] = None,
+    ):
+        from app.services.google_sheets_service import GoogleSheetsService
+
+        GoogleSheetsService.sync_prospect_by_id(
+            db, prospect_id, actor_id=actor_id
+        )
+        return ProspectRepository.get_by_id(db, prospect_id)
 
     @staticmethod
     def delete(db: Session, prospect_id: int, actor_id: Optional[int] = None):
@@ -527,7 +549,7 @@ class ProspectService:
                 actor_id=actor_id,
             )
 
-        return updated
+        return ProspectService._after_change_sync(db, updated.id, actor_id)
 
     @staticmethod
     def update_exam(
@@ -535,6 +557,7 @@ class ProspectService:
         prospect_id: int,
         attended: bool,
         certified: bool,
+        actor_id: Optional[int] = None,
     ):
         prospect = ProspectRepository.get_by_id(db, prospect_id)
         if not prospect:
@@ -542,4 +565,5 @@ class ProspectService:
 
         prospect.exam_attended = attended
         prospect.exam_certified = certified
-        return ProspectRepository.update(db, prospect)
+        ProspectRepository.update(db, prospect)
+        return ProspectService._after_change_sync(db, prospect_id, actor_id)

@@ -351,13 +351,20 @@ class ProspectResponse(BaseModel):
         default=None, serialization_alias="followUpDate"
     )
 
+    sheets_synced: bool = Field(
+        default=False, serialization_alias="sheetsSynced"
+    )
+    sheets_row_id: Optional[str] = Field(
+        default=None, serialization_alias="sheetsRowId"
+    )
+
     created_at: datetime = Field(serialization_alias="createdAt")
     updated_at: datetime = Field(serialization_alias="updatedAt")
 
     payments: list[PaymentResponse] = []
     documents: list[DocumentResponse] = []
 
-    @field_validator("exam_attended", "exam_certified", mode="before")
+    @field_validator("exam_attended", "exam_certified", "sheets_synced", mode="before")
     @classmethod
     def coerce_bool(cls, value: Any) -> bool:
         return bool(value)

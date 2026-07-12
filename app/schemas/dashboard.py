@@ -283,6 +283,40 @@ class WinLossItem(BaseModel):
     win_rate: float = Field(default=0.0, serialization_alias="winRate")
 
 
+class RevenueReportResponse(BaseModel):
+    model_config = _alias_config()
+
+    total_revenue: Decimal = Field(
+        default=Decimal("0"), serialization_alias="totalRevenue"
+    )
+    payment_collected: PaymentCollectedSummary = Field(
+        default_factory=PaymentCollectedSummary,
+        serialization_alias="paymentCollected",
+    )
+    sales_by_month: list[SalesByMonthItem] = Field(
+        default_factory=list,
+        serialization_alias="salesByMonth",
+    )
+    sales_by_employee: list[SalesByEmployeeItem] = Field(
+        default_factory=list,
+        serialization_alias="salesByEmployee",
+    )
+
+
+class EmployeePerformanceReportResponse(BaseModel):
+    model_config = _alias_config()
+
+    items: list[EmployeePerformanceItem] = Field(default_factory=list)
+    total: int = 0
+
+
+class LeadsByStageReportResponse(BaseModel):
+    model_config = _alias_config()
+
+    items: list[StageCountItem] = Field(default_factory=list)
+    total: int = 0
+
+
 class AdminReportResponse(DashboardMetricsMixin):
     model_config = _alias_config()
 

@@ -22,6 +22,7 @@ from app.db.models.prospect_document import DocumentType
 from app.db.models.user import User, UserRole
 from app.db.session import get_db
 from app.dependencies.auth import get_current_user, get_optional_user
+from app.dependencies.permissions import require_admin
 from app.schemas.prospect import (
     ProspectCreate,
     ProspectListResponse,
@@ -833,6 +834,32 @@ async def add_lead_payment(
         raise HTTPException(status_code=422, detail=ex.errors())
     except ValueError as ex:
         raise HTTPException(status_code=404, detail=str(ex))
+
+
+@router.post(
+    "/{prospect_id}/sync-sheets",
+    response_model=ProspectResponse,
+)
+def sync_prospect_to_sheets(
+    prospect_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin),
+):
+    """
+    Admin: manually (re)sync a lead row to Google Sheets.
+    Useful after a failed automatic sync.
+    """
+    from app.services.google_sheets_service import GoogleSheetsService
+
+    try:
+        prospect = ProspectService.get(db, prospect_id)
+    except ValueError as ex:
+        raise HTTPException(status_code=404, detail=str(ex)) from ex
+
+    synced = GoogleSheetsService.sync_prospect(
+        db, prospect, actor_id=current_user.id
+    )
+    return ProspectService.get(db, synced.id)
 
 
 @router.delete("/{prospect_id}", status_code=status.HTTP_204_NO_CONTENT)

@@ -7,8 +7,14 @@ from sqlalchemy.orm import Session
 from app.db.models.user import User, UserRole
 from app.db.session import get_db
 from app.dependencies.auth import get_current_user
-from app.dependencies.permissions import require_admin, resolve_employee_scope
-from app.schemas.dashboard import AdminReportResponse, EmployeeReportResponse
+from app.dependencies.permissions import require_admin
+from app.schemas.dashboard import (
+    AdminReportResponse,
+    EmployeePerformanceReportResponse,
+    EmployeeReportResponse,
+    LeadsByStageReportResponse,
+    RevenueReportResponse,
+)
 from app.services.dashboard_service import ReportService
 
 router = APIRouter(prefix="/reports", tags=["Reports & Analytics"])
@@ -48,7 +54,7 @@ def employee_report(
             source=source,
         )
     except ValueError as ex:
-        raise HTTPException(status_code=404, detail=str(ex))
+        raise HTTPException(status_code=404, detail=str(ex)) from ex
 
 
 @router.get(
@@ -74,7 +80,7 @@ def employee_report_by_id(
             source=source,
         )
     except ValueError as ex:
-        raise HTTPException(status_code=404, detail=str(ex))
+        raise HTTPException(status_code=404, detail=str(ex)) from ex
 
 
 @router.get("/admin", response_model=AdminReportResponse)
@@ -96,5 +102,68 @@ def admin_report(
         date_to=date_to,
         employee_id=employee_id,
         stage=stage,
+        source=source,
+    )
+
+
+@router.get("/revenue", response_model=RevenueReportResponse)
+def revenue_report(
+    date_from: Optional[date] = Query(None, alias="dateFrom"),
+    date_to: Optional[date] = Query(None, alias="dateTo"),
+    employee_id: Optional[int] = Query(None, alias="employeeId"),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin),
+):
+    """Admin revenue report: totals, monthly trend, by employee."""
+    return ReportService.revenue_report(
+        db,
+        date_from=date_from,
+        date_to=date_to,
+        employee_id=employee_id,
+    )
+
+
+@router.get(
+    "/employee-performance",
+    response_model=EmployeePerformanceReportResponse,
+)
+def employee_performance_report(
+    date_from: Optional[date] = Query(None, alias="dateFrom"),
+    date_to: Optional[date] = Query(None, alias="dateTo"),
+    employee_id: Optional[int] = Query(None, alias="employeeId"),
+    stage: Optional[str] = None,
+    source: Optional[str] = None,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin),
+):
+    """Admin employee performance comparison."""
+    return ReportService.employee_performance_report(
+        db,
+        date_from=date_from,
+        date_to=date_to,
+        employee_id=employee_id,
+        stage=stage,
+        source=source,
+    )
+
+
+@router.get(
+    "/leads-by-stage",
+    response_model=LeadsByStageReportResponse,
+)
+def leads_by_stage_report(
+    date_from: Optional[date] = Query(None, alias="dateFrom"),
+    date_to: Optional[date] = Query(None, alias="dateTo"),
+    employee_id: Optional[int] = Query(None, alias="employeeId"),
+    source: Optional[str] = None,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin),
+):
+    """Admin leads grouped by pipeline stage."""
+    return ReportService.leads_by_stage_report(
+        db,
+        date_from=date_from,
+        date_to=date_to,
+        employee_id=employee_id,
         source=source,
     )

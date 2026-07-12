@@ -4,7 +4,6 @@ from sqlalchemy.orm import Session
 from app.core.file_storage import FileStorage
 from app.core.id_generator import generate_id
 
-from app.db.models.prospect import Prospect
 from app.db.models.prospect_document import (
     ProspectDocument,
 )
@@ -25,6 +24,12 @@ from app.schemas.document import (
 class DocumentService:
 
     @staticmethod
+    def _sync_sheets(db: Session, prospect_id: int) -> None:
+        from app.services.google_sheets_service import GoogleSheetsService
+
+        GoogleSheetsService.sync_prospect_by_id(db, prospect_id)
+
+    @staticmethod
     def upload_document(
         db: Session,
         prospect_id: int,
@@ -32,16 +37,9 @@ class DocumentService:
         file: UploadFile,
         remarks: str | None = None,
     ):
-
-        prospect = ProspectRepository.get_by_id(
-            db,
-            prospect_id,
-        )
-
+        prospect = ProspectRepository.get_by_id(db, prospect_id)
         if not prospect:
-            raise ValueError(
-                "Prospect not found."
-            )
+            raise ValueError("Prospect not found.")
 
         document_code = generate_id(
             db,
@@ -50,71 +48,38 @@ class DocumentService:
             "DOC",
         )
 
-        (
-            file_url,
-            stored_filename,
-            file_size,
-        ) = FileStorage.save_file(
+        file_url, stored_filename, file_size = FileStorage.save_file(
             upload_file=file,
             folder=f"prospects/{prospect.prospect_id}",
             filename=document_code,
         )
 
         document = ProspectDocument(
-
             document_id=document_code,
-
             prospect_id=prospect.id,
-
             document_type=document_type,
-
             original_filename=file.filename,
-
             stored_filename=stored_filename,
-
             file_url=file_url,
-
             mime_type=file.content_type,
-
             file_size=file_size,
-
             remarks=remarks,
-
             verified=False,
         )
 
-        return DocumentRepository.create(
-            db,
-            document,
-        )
+        created = DocumentRepository.create(db, document)
+        DocumentService._sync_sheets(db, prospect_id)
+        return created
 
     @staticmethod
-    def get_documents(
-        db: Session,
-        prospect_id: int,
-    ):
-
-        return DocumentRepository.get_by_prospect(
-            db,
-            prospect_id,
-        )
+    def get_documents(db: Session, prospect_id: int):
+        return DocumentRepository.get_by_prospect(db, prospect_id)
 
     @staticmethod
-    def get_document(
-        db: Session,
-        document_id: int,
-    ):
-
-        document = DocumentRepository.get_by_id(
-            db,
-            document_id,
-        )
-
+    def get_document(db: Session, document_id: int):
+        document = DocumentRepository.get_by_id(db, document_id)
         if not document:
-            raise ValueError(
-                "Document not found."
-            )
-
+            raise ValueError("Document not found.")
         return document
 
     @staticmethod
@@ -123,55 +88,25 @@ class DocumentService:
         document_id: int,
         payload: DocumentUpdate,
     ):
-
-        document = DocumentRepository.get_by_id(
-            db,
-            document_id,
-        )
-
+        document = DocumentRepository.get_by_id(db, document_id)
         if not document:
-            raise ValueError(
-                "Document not found."
-            )
+            raise ValueError("Document not found.")
 
-        data = payload.model_dump(
-            exclude_unset=True,
-        )
-
+        data = payload.model_dump(exclude_unset=True)
         for key, value in data.items():
+            setattr(document, key, value)
 
-            setattr(
-                document,
-                key,
-                value,
-            )
-
-        return DocumentRepository.update(
-            db,
-            document,
-        )
+        updated = DocumentRepository.update(db, document)
+        DocumentService._sync_sheets(db, document.prospect_id)
+        return updated
 
     @staticmethod
-    def delete_document(
-        db: Session,
-        document_id: int,
-    ):
-
-        document = DocumentRepository.get_by_id(
-            db,
-            document_id,
-        )
-
+    def delete_document(db: Session, document_id: int):
+        document = DocumentRepository.get_by_id(db, document_id)
         if not document:
-            raise ValueError(
-                "Document not found."
-            )
+            raise ValueError("Document not found.")
 
-        FileStorage.delete_file(
-            document.file_url,
-        )
-
-        DocumentRepository.delete(
-            db,
-            document,
-        )
+        prospect_id = document.prospect_id
+        FileStorage.delete_file(document.file_url)
+        DocumentRepository.delete(db, document)
+        DocumentService._sync_sheets(db, prospect_id)

@@ -10,6 +10,7 @@ from app.api.v1.reports import router as reports_router
 from app.api.v1.exports import router as exports_router
 from app.api.v1.notifications import router as notifications_router
 from app.api.v1.activity_logs import router as activity_logs_router
+from app.api.v1.employees import router as employees_router
 
 api_router = APIRouter()
 
@@ -23,3 +24,4 @@ api_router.include_router(reports_router)
 api_router.include_router(exports_router)
 api_router.include_router(notifications_router)
 api_router.include_router(activity_logs_router)
+api_router.include_router(employees_router)

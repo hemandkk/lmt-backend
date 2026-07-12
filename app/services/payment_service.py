@@ -58,7 +58,18 @@ class PaymentService:
             receipt_url=receipt_url,
             created_by=current_user_id,
         )
-        return self.payment_repo.create(payment)
+        created = self.payment_repo.create(payment)
+        self._sync_sheets(payment_in.prospect_id, current_user_id)
+        return created
+
+    def _sync_sheets(
+        self, prospect_id: int, actor_id: int | None = None
+    ) -> None:
+        from app.services.google_sheets_service import GoogleSheetsService
+
+        GoogleSheetsService.sync_prospect_by_id(
+            self.db, prospect_id, actor_id=actor_id
+        )
 
     def get_payment(self, payment_id: int) -> Payment | None:
         return self.payment_repo.get_by_id(payment_id)
@@ -94,7 +105,9 @@ class PaymentService:
             if existing and existing.id != payment.id:
                 raise ValueError("Transaction number already exists.")
 
-        return self.payment_repo.update(payment, payment_in)
+        updated = self.payment_repo.update(payment, payment_in)
+        self._sync_sheets(updated.prospect_id)
+        return updated
 
     def upload_receipt(
         self, payment_id: int, file: UploadFile
@@ -124,12 +137,16 @@ class PaymentService:
                 filename=payment.payment_id,
             )
 
-        return self.payment_repo.update_receipt(payment, receipt_url)
+        updated = self.payment_repo.update_receipt(payment, receipt_url)
+        self._sync_sheets(updated.prospect_id)
+        return updated
 
     def delete_payment(self, payment_id: int) -> None:
         payment = self.payment_repo.get_by_id(payment_id)
         if not payment:
             raise ValueError("Payment not found.")
+        prospect_id = payment.prospect_id
         if payment.receipt_url:
             FileStorage.delete_file(payment.receipt_url)
         self.payment_repo.delete(payment)
+        self._sync_sheets(prospect_id)
