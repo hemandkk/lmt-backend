@@ -12,7 +12,13 @@ from fastapi import (
     UploadFile as FastAPIUploadFile,
     status,
 )
-from pydantic import ValidationError
+from pydantic import (
+    AliasChoices,
+    BaseModel,
+    ConfigDict,
+    Field,
+    ValidationError,
+)
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -37,6 +43,29 @@ from app.services.prospect_service import ProspectService
 from app.services.document_service import DocumentService
 from app.services.notification_service import ActivityLogService
 from app.repositories.payment_repository import PaymentRepository
+
+
+class StageUpdateRequest(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    stage: str
+
+
+class ExamUpdateRequest(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    attended: Optional[bool] = Field(
+        default=None,
+        validation_alias=AliasChoices(
+            "attended", "examAttended", "exam_attended"
+        ),
+    )
+    certified: Optional[bool] = Field(
+        default=None,
+        validation_alias=AliasChoices(
+            "certified", "examCertified", "exam_certified"
+        ),
+    )
 
 router = APIRouter(
     prefix="/prospects",
@@ -590,6 +619,11 @@ async def upload_prospect_document(
         )
     except ValueError as ex:
         raise HTTPException(status_code=400, detail=str(ex)) from ex
+    except IntegrityError as ex:
+        raise HTTPException(
+            status_code=400,
+            detail="Could not save document (duplicate id). Please retry.",
+        ) from ex
 
 
 @router.post(
@@ -883,7 +917,7 @@ def delete_prospect(
 @router.patch("/{prospect_id}/stage", response_model=ProspectResponse)
 def update_stage(
     prospect_id: int,
-    stage: str,
+    payload: StageUpdateRequest,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -893,23 +927,40 @@ def update_stage(
         return ProspectService.change_stage(
             db,
             prospect_id,
-            stage,
+            payload.stage,
             actor_id=current_user.id,
         )
     except ValueError as ex:
-        raise HTTPException(status_code=404, detail=str(ex))
+        detail = str(ex)
+        status_code = (
+            status.HTTP_400_BAD_REQUEST
+            if detail.lower().startswith("invalid stage")
+            else status.HTTP_404_NOT_FOUND
+        )
+        raise HTTPException(status_code=status_code, detail=detail)
 
 
 @router.patch("/{prospect_id}/exam", response_model=ProspectResponse)
 def update_exam(
     prospect_id: int,
-    attended: bool,
-    certified: bool,
+    payload: ExamUpdateRequest,
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
+    if payload.attended is None and payload.certified is None:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="Provide examAttended and/or examCertified.",
+        )
     try:
+        prospect = ProspectService.get(db, prospect_id)
+        _ensure_prospect_access(prospect, current_user)
         return ProspectService.update_exam(
-            db, prospect_id, attended, certified
+            db,
+            prospect_id,
+            attended=payload.attended,
+            certified=payload.certified,
+            actor_id=current_user.id,
         )
     except ValueError as ex:
         raise HTTPException(status_code=404, detail=str(ex))

@@ -30,6 +30,24 @@ class DocumentService:
         GoogleSheetsService.sync_prospect_by_id(db, prospect_id)
 
     @staticmethod
+    def _next_document_code(db: Session) -> str:
+        """Sequential DOC code that is unique in DB (retries on collision)."""
+        code = generate_id(db, ProspectDocument, "document_id", "DOC")
+        attempts = 0
+        while DocumentRepository.get_by_document_id(db, code):
+            attempts += 1
+            # Skip past collisions (legacy/hex IDs, races)
+            match_digits = "".join(ch for ch in code[3:] if ch.isdigit())
+            n = int(match_digits or "0") + attempts
+            code = f"DOC{n:05d}"
+            if attempts > 50:
+                from uuid import uuid4
+
+                code = f"DOC{uuid4().hex[:5].upper()}"
+                break
+        return code
+
+    @staticmethod
     def upload_document(
         db: Session,
         prospect_id: int,
@@ -41,12 +59,29 @@ class DocumentService:
         if not prospect:
             raise ValueError("Prospect not found.")
 
-        document_code = generate_id(
-            db,
-            ProspectDocument,
-            "document_id",
-            "DOC",
+        existing = DocumentRepository.get_by_prospect_and_type(
+            db, prospect.id, document_type
         )
+
+        if existing:
+            file_url, stored_filename, file_size = FileStorage.replace_file(
+                old_file=existing.file_url,
+                upload_file=file,
+                folder=f"prospects/{prospect.prospect_id}",
+                filename=existing.document_id,
+            )
+            existing.original_filename = file.filename or existing.original_filename
+            existing.stored_filename = stored_filename
+            existing.file_url = file_url
+            existing.mime_type = file.content_type
+            existing.file_size = file_size
+            if remarks is not None:
+                existing.remarks = remarks
+            updated = DocumentRepository.update(db, existing)
+            DocumentService._sync_sheets(db, prospect_id)
+            return updated
+
+        document_code = DocumentService._next_document_code(db)
 
         file_url, stored_filename, file_size = FileStorage.save_file(
             upload_file=file,
@@ -58,7 +93,7 @@ class DocumentService:
             document_id=document_code,
             prospect_id=prospect.id,
             document_type=document_type,
-            original_filename=file.filename,
+            original_filename=file.filename or "document",
             stored_filename=stored_filename,
             file_url=file_url,
             mime_type=file.content_type,

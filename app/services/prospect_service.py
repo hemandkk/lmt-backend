@@ -1,6 +1,7 @@
 from math import ceil
 from typing import Any, Optional
 from uuid import uuid4
+import re
 
 from fastapi import UploadFile
 from sqlalchemy.orm import Session
@@ -522,8 +523,13 @@ class ProspectService:
             raise ValueError("Prospect not found.")
 
         if isinstance(stage, str):
+            snake = re.sub(
+                r"([a-z0-9])([A-Z])", r"\1_\2", stage.strip()
+            ).lower().replace("-", "_")
+            aliases = {"followup": "follow_up"}
+            snake = aliases.get(snake, snake)
             try:
-                stage = ProspectStage(stage)
+                stage = ProspectStage(snake)
             except ValueError as exc:
                 raise ValueError(f"Invalid stage: {stage}") from exc
 
@@ -555,15 +561,17 @@ class ProspectService:
     def update_exam(
         db: Session,
         prospect_id: int,
-        attended: bool,
-        certified: bool,
+        attended: Optional[bool] = None,
+        certified: Optional[bool] = None,
         actor_id: Optional[int] = None,
     ):
         prospect = ProspectRepository.get_by_id(db, prospect_id)
         if not prospect:
             raise ValueError("Prospect not found.")
 
-        prospect.exam_attended = attended
-        prospect.exam_certified = certified
+        if attended is not None:
+            prospect.exam_attended = attended
+        if certified is not None:
+            prospect.exam_certified = certified
         ProspectRepository.update(db, prospect)
         return ProspectService._after_change_sync(db, prospect_id, actor_id)

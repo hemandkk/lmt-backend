@@ -65,6 +65,22 @@ class DocumentRepository:
         )
 
     @staticmethod
+    def get_by_prospect_and_type(
+        db: Session,
+        prospect_id: int,
+        document_type,
+    ) -> Optional[ProspectDocument]:
+        return (
+            db.query(ProspectDocument)
+            .filter(
+                ProspectDocument.prospect_id == prospect_id,
+                ProspectDocument.document_type == document_type,
+            )
+            .order_by(ProspectDocument.created_at.desc())
+            .first()
+        )
+
+    @staticmethod
     def update(
         db: Session,
         document: ProspectDocument,
