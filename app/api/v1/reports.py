@@ -7,11 +7,12 @@ from sqlalchemy.orm import Session
 from app.db.models.user import User, UserRole
 from app.db.session import get_db
 from app.dependencies.auth import get_current_user
-from app.dependencies.permissions import require_admin
+from app.dependencies.permissions import require_admin, resolve_employee_scope
 from app.schemas.dashboard import (
     AdminReportResponse,
     EmployeePerformanceReportResponse,
     EmployeeReportResponse,
+    IncentiveReportResponse,
     LeadsByStageReportResponse,
     RevenueReportResponse,
 )
@@ -167,3 +168,33 @@ def leads_by_stage_report(
         employee_id=employee_id,
         source=source,
     )
+
+
+@router.get("/incentives", response_model=IncentiveReportResponse)
+def incentives_report(
+    month: Optional[str] = Query(
+        None,
+        description="Month in YYYY-MM format (e.g. 2026-07). Defaults to current month.",
+    ),
+    employee_id: Optional[int] = Query(
+        None,
+        alias="employeeId",
+        description="Admin only: filter to one employee",
+    ),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Incentive report for a calendar month.
+    - Employee: own incentive only
+    - Admin: all employees, or ?employeeId=
+    """
+    scoped_employee_id = resolve_employee_scope(current_user, employee_id)
+    try:
+        return ReportService.incentive_report(
+            db,
+            month=month,
+            employee_id=scoped_employee_id,
+        )
+    except ValueError as ex:
+        raise HTTPException(status_code=400, detail=str(ex)) from ex

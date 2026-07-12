@@ -14,6 +14,9 @@ from app.schemas.dashboard import (
     EmployeePerformanceReportResponse,
     EmployeeReportResponse,
     ExamStatsSummary,
+    IncentiveReportItem,
+    IncentiveReportResponse,
+    IncentiveReportTotals,
     IncentiveStatusSummary,
     LeadCountSummary,
     LeadSourceItem,
@@ -566,4 +569,106 @@ class ReportService:
         return LeadsByStageReportResponse(
             items=items,
             total=sum(i.count for i in items),
+        )
+
+    @staticmethod
+    def _parse_month(month: Optional[str]) -> tuple[date, date, str]:
+        """
+        Parse YYYY-MM into inclusive month bounds.
+        Defaults to the current calendar month.
+        """
+        from calendar import monthrange
+
+        from app.core.date_utils import today
+
+        current = today()
+        if month:
+            try:
+                year_str, month_str = month.strip().split("-", 1)
+                year = int(year_str)
+                month_num = int(month_str)
+                if month_num < 1 or month_num > 12:
+                    raise ValueError
+            except ValueError as ex:
+                raise ValueError(
+                    "Invalid month. Use format YYYY-MM (e.g. 2026-07)."
+                ) from ex
+        else:
+            year = current.year
+            month_num = current.month
+
+        start = date(year, month_num, 1)
+        end = date(year, month_num, monthrange(year, month_num)[1])
+        label = f"{year:04d}-{month_num:02d}"
+        return start, end, label
+
+    @staticmethod
+    def incentive_report(
+        db: Session,
+        month: Optional[str] = None,
+        employee_id: Optional[int] = None,
+    ) -> IncentiveReportResponse:
+        date_from, date_to, month_label = ReportService._parse_month(month)
+
+        employees = AnalyticsRepository.list_active_employees(
+            db, employee_id=employee_id
+        )
+        # If filtering a specific id that is inactive/missing, still try that user
+        if employee_id is not None and not employees:
+            from app.repositories.user_repository import UserRepository
+            from app.db.models.user import UserRole
+
+            user = UserRepository.get_by_id(db, employee_id)
+            if not user or user.role != UserRole.employee:
+                raise ValueError("Employee not found.")
+            employees = [user]
+
+        items: list[IncentiveReportItem] = []
+        total_collection = Decimal("0")
+        total_incentive = Decimal("0")
+        eligible_count = 0
+
+        for user in employees:
+            collection = AnalyticsRepository.payment_collected(
+                db,
+                employee_id=user.id,
+                date_from=date_from,
+                date_to=date_to,
+            )
+            status = AnalyticsRepository.incentive_status(
+                db,
+                employee_id=user.id,
+                collection=collection,
+            )
+            item = IncentiveReportItem(
+                employee_id=user.id,
+                employee_code=user.employee_id,
+                employee_name=user.name or "Unknown",
+                eligible=bool(status.get("eligible")),
+                amount=Decimal(str(status.get("amount") or 0)),
+                rate=Decimal(str(status.get("rate") or 0)),
+                slab=status.get("slab"),
+                collection=Decimal(str(status.get("collection") or 0)),
+                next_bracket_amount=status.get("next_bracket_amount"),
+                next_bracket_rate=status.get("next_bracket_rate"),
+            )
+            items.append(item)
+            total_collection += item.collection
+            total_incentive += item.amount
+            if item.eligible:
+                eligible_count += 1
+
+        items.sort(key=lambda x: x.amount, reverse=True)
+
+        return IncentiveReportResponse(
+            month=month_label,
+            date_from=date_from,
+            date_to=date_to,
+            items=items,
+            totals=IncentiveReportTotals(
+                collection=total_collection,
+                incentive_amount=total_incentive,
+                eligible_count=eligible_count,
+                employee_count=len(items),
+            ),
         )

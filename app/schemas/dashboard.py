@@ -317,6 +317,50 @@ class LeadsByStageReportResponse(BaseModel):
     total: int = 0
 
 
+class IncentiveReportItem(BaseModel):
+    model_config = _alias_config()
+
+    employee_id: int = Field(serialization_alias="employeeId")
+    employee_code: Optional[str] = Field(
+        default=None, serialization_alias="employeeCode"
+    )
+    employee_name: str = Field(serialization_alias="employeeName")
+    eligible: bool = False
+    amount: Decimal = Decimal("0")
+    rate: Decimal = Decimal("0")
+    slab: Optional[str] = None
+    collection: Decimal = Decimal("0")
+    next_bracket_amount: Optional[Decimal] = Field(
+        default=None, serialization_alias="nextBracketAmount"
+    )
+    next_bracket_rate: Optional[Decimal] = Field(
+        default=None, serialization_alias="nextBracketRate"
+    )
+
+
+class IncentiveReportTotals(BaseModel):
+    model_config = _alias_config()
+
+    collection: Decimal = Decimal("0")
+    incentive_amount: Decimal = Field(
+        default=Decimal("0"), serialization_alias="incentiveAmount"
+    )
+    eligible_count: int = Field(default=0, serialization_alias="eligibleCount")
+    employee_count: int = Field(default=0, serialization_alias="employeeCount")
+
+
+class IncentiveReportResponse(BaseModel):
+    model_config = _alias_config()
+
+    month: str
+    date_from: date = Field(serialization_alias="dateFrom")
+    date_to: date = Field(serialization_alias="dateTo")
+    items: list[IncentiveReportItem] = Field(default_factory=list)
+    totals: IncentiveReportTotals = Field(
+        default_factory=IncentiveReportTotals
+    )
+
+
 class AdminReportResponse(DashboardMetricsMixin):
     model_config = _alias_config()
 
