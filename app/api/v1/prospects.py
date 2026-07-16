@@ -95,6 +95,7 @@ LEAD_FORM_FIELDS = {
     "courseId",
     "course_id",
     "specialization",
+    "university",
     "address",
     "deliveryAddress",
     "delivery_address",

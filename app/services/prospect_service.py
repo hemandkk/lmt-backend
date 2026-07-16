@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 
 from app.core.file_storage import FileStorage
 from app.core.id_generator import generate_id, generate_next_code
+from app.core.security import hash_password
 from app.db.models.payment import Payment, PaymentMethod, PaymentStatus
 from app.db.models.prospect import Prospect, ProspectStage
 from app.db.models.prospect_document import DocumentType, ProspectDocument
@@ -292,7 +293,7 @@ class ProspectService:
         prospect = Prospect(
             prospect_id=prospect_code,
             name=payload.name,
-            password=payload.password,
+            password=hash_password(payload.password),
             email=payload.email,
             phone=payload.phone,
             father_name=payload.father_name,
@@ -417,6 +418,8 @@ class ProspectService:
             exclude={"payments", "documents", "replace_payments"},
         )
         for key, value in data.items():
+            if key == "password":
+                value = hash_password(value)
             setattr(prospect, key, value)
 
         if payload.payments is not None:

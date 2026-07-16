@@ -97,6 +97,11 @@ class Prospect(TimestampMixin, Base):
         nullable=True,
     )
 
+    university = Column(
+        String(255),
+        nullable=True,
+    )
+
     # Address
 
     address = Column(
