@@ -6,7 +6,7 @@ Create Date: 2026-07-12 01:10:00.000000
 
 """
 from typing import Sequence, Union
-
+from sqlalchemy.dialects import postgresql
 from alembic import op
 import sqlalchemy as sa
 
@@ -39,7 +39,7 @@ def upgrade() -> None:
         unique=False,
     )
 
-    notification_type = sa.Enum(
+    notification_type = postgresql.ENUM(
         "lead_assigned",
         "follow_up_reminder",
         "stage_changed",
@@ -55,7 +55,7 @@ def upgrade() -> None:
         sa.Column("prospect_id", sa.Integer(), nullable=True),
         sa.Column(
             "type",
-            sa.Enum(
+            postgresql.ENUM(
                 "lead_assigned",
                 "follow_up_reminder",
                 "stage_changed",
