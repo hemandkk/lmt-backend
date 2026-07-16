@@ -187,6 +187,7 @@ class ProspectCreate(BaseModel):
 
     course_id: Optional[int] = Field(default=None, alias="courseId")
     specialization: Optional[str] = None
+    university: Optional[str] = None
 
     address: Optional[str] = None
     delivery_address: Optional[str] = Field(
@@ -247,6 +248,7 @@ class ProspectUpdate(BaseModel):
 
     course_id: Optional[int] = Field(default=None, alias="courseId")
     specialization: Optional[str] = None
+    university: Optional[str] = None
 
     address: Optional[str] = None
     delivery_address: Optional[str] = Field(
@@ -346,6 +348,7 @@ class ProspectResponse(BaseModel):
         default=None, serialization_alias="courseId"
     )
     specialization: Optional[str] = None
+    university: Optional[str] = None
     source: Optional[str] = None
     follow_up_date: Optional[date] = Field(
         default=None, serialization_alias="followUpDate"

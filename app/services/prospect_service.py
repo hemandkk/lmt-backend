@@ -301,6 +301,7 @@ class ProspectService:
             dob=payload.dob,
             course_id=payload.course_id,
             specialization=payload.specialization,
+            university=payload.university,
             address=payload.address,
             delivery_address=payload.delivery_address,
             delivery_date=payload.delivery_date,
