@@ -182,12 +182,36 @@ class MonthlySalesItem(BaseModel):
     leads_won: int = Field(default=0, serialization_alias="leadsWon")
 
 
+class RevenueByMonthItem(BaseModel):
+    """Shape expected by frontend RevenueChart (last 6 months)."""
+
+    model_config = _alias_config()
+
+    month: str
+    year: int
+    revenue: Decimal = Decimal("0")
+    label: Optional[str] = None
+
+
 class AdminDashboardResponse(DashboardMetricsMixin):
     model_config = _alias_config()
 
     total_employees: int = Field(serialization_alias="totalEmployees")
     total_revenue: Decimal = Field(
         default=Decimal("0"), serialization_alias="totalRevenue"
+    )
+    leads_this_week: int = Field(
+        default=0, serialization_alias="leadsThisWeek"
+    )
+    conversion_rate: float = Field(
+        default=0.0, serialization_alias="conversionRate"
+    )
+    certificates_issued: int = Field(
+        default=0, serialization_alias="certificatesIssued"
+    )
+    revenue_by_month: list[RevenueByMonthItem] = Field(
+        default_factory=list,
+        serialization_alias="revenueByMonth",
     )
     employee_performance: list[EmployeePerformanceItem] = Field(
         default_factory=list,

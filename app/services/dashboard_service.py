@@ -24,6 +24,7 @@ from app.schemas.dashboard import (
     MonthlySalesItem,
     PaymentCollectedSummary,
     PaymentStatusSummary,
+    RevenueByMonthItem,
     RevenueReportResponse,
     SalesByEmployeeItem,
     SalesByMonthItem,
@@ -237,6 +238,34 @@ class DashboardService:
             date_from=date_from,
             date_to=date_to,
             employee_id=employee_id,
+            months=6,
+        )
+        monthly_items = [
+            MonthlySalesItem(
+                month=m["month"],
+                year=m["year"],
+                revenue=m["revenue"],
+                leads_won=m.get("leads_won", m.get("deals", 0)),
+            )
+            for m in monthly
+        ]
+        revenue_by_month = [
+            RevenueByMonthItem(
+                month=m["month"],
+                year=m["year"],
+                revenue=m["revenue"],
+                label=f"{m['month']} {m['year']}",
+            )
+            for m in monthly
+        ]
+
+        lead_counts = overview["lead_counts"]
+        exam = overview["exam_stats"]
+        conversion_rate = AnalyticsRepository.conversion_rate(
+            db,
+            employee_id=employee_id,
+            date_from=date_from,
+            date_to=date_to,
         )
 
         return AdminDashboardResponse(
@@ -252,16 +281,12 @@ class DashboardService:
                 date_to=date_to,
                 employee_id=employee_id,
             ),
+            leads_this_week=lead_counts.this_week,
+            conversion_rate=conversion_rate,
+            certificates_issued=exam.certified,
+            revenue_by_month=revenue_by_month,
             employee_performance=_enrich_performance(db, performance),
-            monthly_sales_trend=[
-                MonthlySalesItem(
-                    month=m["month"],
-                    year=m["year"],
-                    revenue=m["revenue"],
-                    leads_won=m.get("leads_won", m.get("deals", 0)),
-                )
-                for m in monthly
-            ],
+            monthly_sales_trend=monthly_items,
             top_performers=_enrich_performance(db, top),
             employees=employees,
         )

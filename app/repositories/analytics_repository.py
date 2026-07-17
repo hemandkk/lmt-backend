@@ -180,6 +180,41 @@ class AnalyticsRepository:
         }
 
     @staticmethod
+    def conversion_rate(
+        db: Session,
+        employee_id: Optional[int] = None,
+        date_from: Optional[date] = None,
+        date_to: Optional[date] = None,
+    ) -> float:
+        """% of leads that have at least one completed payment (leads → paid)."""
+        total = AnalyticsRepository.count_leads(
+            db,
+            employee_id=employee_id,
+            date_from=date_from,
+            date_to=date_to,
+        )
+        if total <= 0:
+            return 0.0
+
+        paid_sq = AnalyticsRepository._paid_amount_subquery(db)
+        query = (
+            db.query(func.count(Prospect.id))
+            .join(paid_sq, paid_sq.c.prospect_id == Prospect.id)
+            .filter(paid_sq.c.paid_amount > 0)
+        )
+        if employee_id is not None:
+            query = query.filter(Prospect.assigned_to_id == employee_id)
+
+        start_dt, end_dt = datetime_range_bounds(date_from, date_to)
+        if start_dt:
+            query = query.filter(Prospect.created_at >= start_dt)
+        if end_dt:
+            query = query.filter(Prospect.created_at <= end_dt)
+
+        paid_leads = int(query.scalar() or 0)
+        return round((paid_leads / total) * 100, 2)
+
+    @staticmethod
     def payment_collected(
         db: Session,
         employee_id: Optional[int] = None,
