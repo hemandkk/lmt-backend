@@ -44,33 +44,33 @@ class CourseResponse(BaseModel):
 
 
 # ==========================================================
-# INCENTIVE SLAB
+# INCENTIVE SLAB (lead-count based)
 # ==========================================================
 
 class IncentiveSlabCreate(BaseModel):
     model_config = _alias_config()
 
-    min_amount: Decimal = Field(..., ge=0, alias="minAmount")
-    max_amount: Optional[Decimal] = Field(default=None, alias="maxAmount")
-    rate_percent: Decimal = Field(..., ge=0, alias="ratePercent")
+    min_leads: int = Field(..., ge=0, alias="minLeads")
+    max_leads: Optional[int] = Field(default=None, alias="maxLeads")
+    incentive_amount: Decimal = Field(..., ge=0, alias="incentiveAmount")
     is_active: bool = Field(default=True, alias="isActive")
 
-    @field_validator("max_amount")
+    @field_validator("max_leads")
     @classmethod
     def max_gte_min(cls, value, info):
-        min_amount = info.data.get("min_amount")
-        if value is not None and min_amount is not None and value < min_amount:
-            raise ValueError("maxAmount must be >= minAmount")
+        min_leads = info.data.get("min_leads")
+        if value is not None and min_leads is not None and value < min_leads:
+            raise ValueError("maxLeads must be >= minLeads")
         return value
 
 
 class IncentiveSlabUpdate(BaseModel):
     model_config = _alias_config()
 
-    min_amount: Optional[Decimal] = Field(default=None, ge=0, alias="minAmount")
-    max_amount: Optional[Decimal] = Field(default=None, alias="maxAmount")
-    rate_percent: Optional[Decimal] = Field(
-        default=None, ge=0, alias="ratePercent"
+    min_leads: Optional[int] = Field(default=None, ge=0, alias="minLeads")
+    max_leads: Optional[int] = Field(default=None, alias="maxLeads")
+    incentive_amount: Optional[Decimal] = Field(
+        default=None, ge=0, alias="incentiveAmount"
     )
     is_active: Optional[bool] = Field(default=None, alias="isActive")
 
@@ -79,9 +79,9 @@ class IncentiveSlabResponse(BaseModel):
     model_config = _alias_config()
 
     id: int
-    min_amount: Decimal = Field(serialization_alias="minAmount")
-    max_amount: Optional[Decimal] = Field(serialization_alias="maxAmount")
-    rate_percent: Decimal = Field(serialization_alias="ratePercent")
+    min_leads: int = Field(serialization_alias="minLeads")
+    max_leads: Optional[int] = Field(serialization_alias="maxLeads")
+    incentive_amount: Decimal = Field(serialization_alias="incentiveAmount")
     is_active: bool = Field(serialization_alias="isActive")
     created_at: datetime = Field(serialization_alias="createdAt")
     updated_at: datetime = Field(serialization_alias="updatedAt")

@@ -628,92 +628,89 @@ class AnalyticsRepository:
     def incentive_status(
         db: Session,
         employee_id: Optional[int] = None,
-        collection: Optional[Decimal] = None,
+        lead_count: Optional[int] = None,
+        date_from: Optional[date] = None,
+        date_to: Optional[date] = None,
     ) -> dict:
+        """
+        Match active lead-count slabs and return fixed incentive for the bracket.
+
+        Example: 10–15 leads → ₹500 (not % of collections).
+        Defaults to leads created in the current calendar month.
+        """
         from app.repositories.incentive_repository import IncentiveRepository
 
-        if collection is None:
+        if lead_count is None:
             current = today()
-            collection = AnalyticsRepository.payment_collected(
+            lead_count = AnalyticsRepository.count_leads(
                 db,
                 employee_id=employee_id,
-                date_from=start_of_month(current),
-                date_to=end_of_month(current),
+                date_from=date_from or start_of_month(current),
+                date_to=date_to or end_of_month(current),
             )
-        collection = Decimal(str(collection or 0))
+        lead_count = int(lead_count or 0)
 
         slabs = IncentiveRepository.get_all(db)
         current_slab = None
         next_slab = None
 
         for index, slab in enumerate(slabs):
-            min_amount = Decimal(str(slab.min_amount or 0))
-            max_amount = (
-                Decimal(str(slab.max_amount))
-                if slab.max_amount is not None
-                else None
+            min_leads = int(slab.min_leads or 0)
+            max_leads = (
+                int(slab.max_leads) if slab.max_leads is not None else None
             )
-            in_range = collection >= min_amount and (
-                max_amount is None or collection <= max_amount
+            in_range = lead_count >= min_leads and (
+                max_leads is None or lead_count <= max_leads
             )
             if in_range:
                 current_slab = slab
                 next_slab = slabs[index + 1] if index + 1 < len(slabs) else None
                 break
-            if collection < min_amount:
+            if lead_count < min_leads:
                 next_slab = slab
                 break
 
-        if current_slab is None and slabs and collection >= Decimal(
-            str(slabs[-1].min_amount or 0)
+        if current_slab is None and slabs and lead_count >= int(
+            slabs[-1].min_leads or 0
         ):
-            # Above last open-ended / past all max bounds — use last slab
             last = slabs[-1]
-            if last.max_amount is None or collection <= Decimal(str(last.max_amount)):
+            if last.max_leads is None or lead_count <= int(last.max_leads):
                 current_slab = last
                 next_slab = None
 
         if current_slab:
-            rate = Decimal(str(current_slab.rate_percent or 0))
-            amount = (collection * rate / Decimal("100")).quantize(
+            amount = Decimal(str(current_slab.incentive_amount or 0)).quantize(
                 Decimal("0.01")
             )
-
-            def _fmt(value: Decimal) -> str:
-                quantized = value.quantize(Decimal("0.01"))
-                if quantized == quantized.to_integral():
-                    return str(int(quantized))
-                return str(quantized)
-
-            min_a = Decimal(str(current_slab.min_amount or 0))
-            max_a = current_slab.max_amount
+            min_l = int(current_slab.min_leads or 0)
+            max_l = current_slab.max_leads
             slab_label = (
-                f"{_fmt(min_a)} - {_fmt(Decimal(str(max_a)))}"
-                if max_a is not None
-                else f"{_fmt(min_a)}+"
+                f"{min_l} - {int(max_l)}"
+                if max_l is not None
+                else f"{min_l}+"
             )
-            eligible = rate > 0 and collection > 0
+            eligible = amount > 0 and lead_count > 0
         else:
-            rate = Decimal("0")
             amount = Decimal("0")
             slab_label = None
             eligible = False
 
-        next_amount = None
-        next_rate = None
+        next_leads_needed = None
+        next_incentive = None
         if next_slab is not None:
-            next_min = Decimal(str(next_slab.min_amount or 0))
-            next_amount = max(Decimal("0"), next_min - collection)
-            next_rate = Decimal(str(next_slab.rate_percent or 0))
+            next_min = int(next_slab.min_leads or 0)
+            next_leads_needed = max(0, next_min - lead_count)
+            next_incentive = Decimal(
+                str(next_slab.incentive_amount or 0)
+            ).quantize(Decimal("0.01"))
 
         return {
             "eligible": eligible,
             "amount": amount,
-            "rate": rate,
             "slab": slab_label,
-            "collection": collection,
-            "next_bracket_amount": next_amount,
-            "next_bracket_rate": next_rate,
+            "lead_count": lead_count,
+            "next_bracket_leads": next_leads_needed,
+            "next_bracket_incentive": next_incentive,
         }
 
     @staticmethod

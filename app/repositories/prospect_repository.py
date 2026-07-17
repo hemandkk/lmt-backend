@@ -1,4 +1,4 @@
-from typing import Optional
+from typing import List, Optional
 
 from sqlalchemy import func
 from sqlalchemy.orm import Session, joinedload, selectinload
@@ -59,6 +59,52 @@ class ProspectRepository:
         search: str | None = None,
         stage: str | None = None,
         assigned_to_id: int | None = None,
+        course_id: int | None = None,
+    ):
+        query = ProspectRepository._filtered_query(
+            db,
+            search=search,
+            stage=stage,
+            assigned_to_id=assigned_to_id,
+            course_id=course_id,
+        )
+
+        total = query.count()
+        items = (
+            query.order_by(Prospect.created_at.desc())
+            .offset((page - 1) * page_size)
+            .limit(page_size)
+            .all()
+        )
+        return items, total
+
+    @staticmethod
+    def list_for_export(
+        db: Session,
+        search: str | None = None,
+        stage: str | None = None,
+        assigned_to_id: int | None = None,
+        course_id: int | None = None,
+    ) -> List[Prospect]:
+        return (
+            ProspectRepository._filtered_query(
+                db,
+                search=search,
+                stage=stage,
+                assigned_to_id=assigned_to_id,
+                course_id=course_id,
+            )
+            .order_by(Prospect.created_at.desc())
+            .all()
+        )
+
+    @staticmethod
+    def _filtered_query(
+        db: Session,
+        search: str | None = None,
+        stage: str | None = None,
+        assigned_to_id: int | None = None,
+        course_id: int | None = None,
     ):
         query = db.query(Prospect).options(
             *ProspectRepository._with_relations()
@@ -66,6 +112,9 @@ class ProspectRepository:
 
         if assigned_to_id is not None:
             query = query.filter(Prospect.assigned_to_id == assigned_to_id)
+
+        if course_id is not None:
+            query = query.filter(Prospect.course_id == course_id)
 
         if search:
             pattern = f"%{search}%"
@@ -79,14 +128,7 @@ class ProspectRepository:
         if stage:
             query = query.filter(Prospect.stage == stage)
 
-        total = query.count()
-        items = (
-            query.order_by(Prospect.created_at.desc())
-            .offset((page - 1) * page_size)
-            .limit(page_size)
-            .all()
-        )
-        return items, total
+        return query
 
     @staticmethod
     def update(db: Session, prospect: Prospect) -> Prospect:

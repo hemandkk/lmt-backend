@@ -10,7 +10,7 @@ class IncentiveRepository:
         query = db.query(IncentiveSlab)
         if not include_inactive:
             query = query.filter(IncentiveSlab.is_active.is_(True))
-        return query.order_by(IncentiveSlab.min_amount.asc()).all()
+        return query.order_by(IncentiveSlab.min_leads.asc()).all()
 
     @staticmethod
     def get_by_id(db: Session, slab_id: int) -> IncentiveSlab | None:

@@ -10,6 +10,8 @@ from app.db.mixins import TimestampMixin
 
 
 class IncentiveSlab(TimestampMixin, Base):
+    """Lead-count incentive brackets, e.g. 10–15 leads → ₹500."""
+
     __tablename__ = "incentive_slabs"
 
     id = Column(
@@ -18,18 +20,18 @@ class IncentiveSlab(TimestampMixin, Base):
         index=True,
     )
 
-    min_amount = Column(
-        Numeric(12, 2),
+    min_leads = Column(
+        Integer,
         nullable=False,
     )
 
-    max_amount = Column(
-        Numeric(12, 2),
+    max_leads = Column(
+        Integer,
         nullable=True,
     )
 
-    rate_percent = Column(
-        Numeric(5, 2),
+    incentive_amount = Column(
+        Numeric(12, 2),
         nullable=False,
     )
 

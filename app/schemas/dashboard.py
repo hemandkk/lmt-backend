@@ -65,14 +65,13 @@ class IncentiveStatusSummary(BaseModel):
 
     eligible: bool = False
     amount: Decimal = Decimal("0")
-    rate: Decimal = Decimal("0")
     slab: Optional[str] = None
-    collection: Decimal = Decimal("0")
-    next_bracket_amount: Optional[Decimal] = Field(
-        default=None, serialization_alias="nextBracketAmount"
+    lead_count: int = Field(default=0, serialization_alias="leadCount")
+    next_bracket_leads: Optional[int] = Field(
+        default=None, serialization_alias="nextBracketLeads"
     )
-    next_bracket_rate: Optional[Decimal] = Field(
-        default=None, serialization_alias="nextBracketRate"
+    next_bracket_incentive: Optional[Decimal] = Field(
+        default=None, serialization_alias="nextBracketIncentive"
     )
 
 
@@ -327,21 +326,20 @@ class IncentiveReportItem(BaseModel):
     employee_name: str = Field(serialization_alias="employeeName")
     eligible: bool = False
     amount: Decimal = Decimal("0")
-    rate: Decimal = Decimal("0")
     slab: Optional[str] = None
-    collection: Decimal = Decimal("0")
-    next_bracket_amount: Optional[Decimal] = Field(
-        default=None, serialization_alias="nextBracketAmount"
+    lead_count: int = Field(default=0, serialization_alias="leadCount")
+    next_bracket_leads: Optional[int] = Field(
+        default=None, serialization_alias="nextBracketLeads"
     )
-    next_bracket_rate: Optional[Decimal] = Field(
-        default=None, serialization_alias="nextBracketRate"
+    next_bracket_incentive: Optional[Decimal] = Field(
+        default=None, serialization_alias="nextBracketIncentive"
     )
 
 
 class IncentiveReportTotals(BaseModel):
     model_config = _alias_config()
 
-    collection: Decimal = Decimal("0")
+    lead_count: int = Field(default=0, serialization_alias="leadCount")
     incentive_amount: Decimal = Field(
         default=Decimal("0"), serialization_alias="incentiveAmount"
     )

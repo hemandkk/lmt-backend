@@ -41,6 +41,7 @@ from app.schemas.prospect import (
 from app.schemas.document import DocumentListResponse, DocumentResponse
 from app.services.prospect_service import ProspectService
 from app.services.document_service import DocumentService
+from app.services.export_service import ExportService
 from app.services.notification_service import ActivityLogService
 from app.repositories.payment_repository import PaymentRepository
 
@@ -344,12 +345,13 @@ def list_prospects(
     page_size: int = Query(20, alias="pageSize", ge=1, le=100),
     search: str | None = None,
     stage: str | None = None,
+    course_id: int | None = Query(None, alias="courseId"),
     assigned_to_id: int | None = Query(None, alias="assignedToId"),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
     """
-    Admin: all prospects (optional assignedToId filter).
+    Admin: all prospects (optional assignedToId / courseId filter).
     Employee: only prospects assigned to the logged-in user.
     """
     scope_id = _employee_scope_id(current_user)
@@ -366,7 +368,40 @@ def list_prospects(
         search,
         stage,
         assigned_to_id=assigned_to_id,
+        course_id=course_id,
     )
+
+
+@router.get("/export")
+def export_prospects(
+    search: str | None = None,
+    stage: str | None = None,
+    course_id: int | None = Query(None, alias="courseId"),
+    assigned_to_id: int | None = Query(None, alias="assignedToId"),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Download filtered leads as Excel (.xlsx).
+
+    Same filters as list (stage, search, courseId, assignedToId).
+    Includes create/edit fields (password excluded) plus absolute
+    document and payment receipt URLs for verification.
+    """
+    scope_id = _employee_scope_id(current_user)
+    if scope_id is not None:
+        assigned_to_id = scope_id
+
+    try:
+        return ExportService.export_prospects_xlsx(
+            db,
+            search=search,
+            stage=stage,
+            assigned_to_id=assigned_to_id,
+            course_id=course_id,
+        )
+    except ValueError as ex:
+        raise HTTPException(status_code=400, detail=str(ex)) from ex
 
 
 @router.get("/{prospect_id}", response_model=ProspectResponse)

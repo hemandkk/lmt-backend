@@ -370,6 +370,7 @@ class ProspectService:
         search: str | None,
         stage: str | None,
         assigned_to_id: int | None = None,
+        course_id: int | None = None,
     ):
         items, total = ProspectRepository.list(
             db,
@@ -378,6 +379,7 @@ class ProspectService:
             search,
             stage,
             assigned_to_id=assigned_to_id,
+            course_id=course_id,
         )
         return {
             "items": items,

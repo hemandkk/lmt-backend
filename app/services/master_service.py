@@ -104,9 +104,9 @@ class MasterService:
         db: Session, payload: IncentiveSlabCreate
     ) -> IncentiveSlab:
         slab = IncentiveSlab(
-            min_amount=payload.min_amount,
-            max_amount=payload.max_amount,
-            rate_percent=payload.rate_percent,
+            min_leads=payload.min_leads,
+            max_leads=payload.max_leads,
+            incentive_amount=payload.incentive_amount,
             is_active=payload.is_active,
         )
         return IncentiveRepository.create(db, slab)
@@ -122,11 +122,11 @@ class MasterService:
         for key, value in data.items():
             setattr(slab, key, value)
         if (
-            slab.max_amount is not None
-            and slab.min_amount is not None
-            and slab.max_amount < slab.min_amount
+            slab.max_leads is not None
+            and slab.min_leads is not None
+            and slab.max_leads < slab.min_leads
         ):
-            raise ValueError("maxAmount must be >= minAmount")
+            raise ValueError("maxLeads must be >= minLeads")
         return IncentiveRepository.update(db, slab)
 
     @staticmethod
@@ -144,9 +144,9 @@ class MasterService:
         slabs = []
         for item in payload.slabs:
             slab = IncentiveSlab(
-                min_amount=item.min_amount,
-                max_amount=item.max_amount,
-                rate_percent=item.rate_percent,
+                min_leads=item.min_leads,
+                max_leads=item.max_leads,
+                incentive_amount=item.incentive_amount,
                 is_active=item.is_active,
             )
             slabs.append(IncentiveRepository.create(db, slab))

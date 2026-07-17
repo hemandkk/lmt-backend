@@ -1,16 +1,225 @@
 import csv
 import io
 from datetime import date
+from decimal import Decimal
 from typing import Any, Optional
 
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
+from app.core.config import settings
+from app.db.models.payment import PaymentStatus
+from app.db.models.prospect_document import DocumentType
 from app.repositories.analytics_repository import AnalyticsRepository
+from app.repositories.prospect_repository import ProspectRepository
 from app.services.dashboard_service import DashboardService
 
 
+DOC_TYPE_LABELS = {
+    DocumentType.aadhaar: "Aadhaar",
+    DocumentType.sslc: "SSLC",
+    DocumentType.plus_two: "Plus Two",
+    DocumentType.degree: "Degree",
+    DocumentType.agreement: "Agreement",
+    DocumentType.passport: "Passport",
+    DocumentType.photo: "Photo",
+    DocumentType.receipt: "Receipt Doc",
+    DocumentType.other: "Other Doc",
+}
+
+
 class ExportService:
+
+    @staticmethod
+    def _absolute_file_url(path: str | None) -> str:
+        if not path:
+            return ""
+        if path.startswith("http://") or path.startswith("https://"):
+            return path
+        base = (settings.APP_BASE_URL or "http://localhost:8000").rstrip("/")
+        return f"{base}{path if path.startswith('/') else '/' + path}"
+
+    @staticmethod
+    def export_prospects_xlsx(
+        db: Session,
+        *,
+        search: str | None = None,
+        stage: str | None = None,
+        assigned_to_id: int | None = None,
+        course_id: int | None = None,
+    ) -> StreamingResponse:
+        """
+        Full lead export matching list filters.
+        Includes create/edit fields (no password) + document & payment file links.
+        """
+        prospects = ProspectRepository.list_for_export(
+            db,
+            search=search,
+            stage=stage,
+            assigned_to_id=assigned_to_id,
+            course_id=course_id,
+        )
+
+        from app.db.models.course import Course
+
+        course_names = {
+            c.id: (c.name or "").strip()
+            for c in db.query(Course.id, Course.name).all()
+        }
+
+        doc_types = list(DocumentType)
+        headers = [
+            "Prospect ID",
+            "Name",
+            "Email",
+            "Phone",
+            "DOB",
+            "Father Name",
+            "Mother Name",
+            "Course Name",
+            "Specialization",
+            "University",
+            "Address",
+            "Delivery Address",
+            "Delivery Date",
+            "Estimated Value",
+            "Total Paid",
+            "Payment %",
+            "Stage",
+            "Source",
+            "Follow-up Date",
+            "Assigned To",
+            "Assigned To Code",
+            "Exam Attended",
+            "Exam Certified",
+            "Notes",
+            "Created At",
+            "Updated At",
+        ]
+        for dt in doc_types:
+            headers.append(f"Doc {DOC_TYPE_LABELS.get(dt, dt.value)} URL")
+        headers.extend(
+            [
+                "Payments Summary",
+                "Payment Receipt URLs",
+            ]
+        )
+
+        rows: list[list[Any]] = []
+        for p in prospects:
+            estimated = Decimal(str(p.estimated_deal_value or 0))
+            total_paid = Decimal("0")
+            payment_lines: list[str] = []
+            receipt_urls: list[str] = []
+
+            for pay in p.payments or []:
+                status_val = (
+                    pay.payment_status.value
+                    if hasattr(pay.payment_status, "value")
+                    else str(pay.payment_status or "")
+                )
+                if status_val == PaymentStatus.completed.value:
+                    total_paid += Decimal(str(pay.amount or 0))
+
+                ptype = (
+                    pay.payment_type.value
+                    if hasattr(pay.payment_type, "value")
+                    else str(pay.payment_type or "")
+                )
+                pmethod = (
+                    pay.payment_method.value
+                    if hasattr(pay.payment_method, "value")
+                    else str(pay.payment_method or "")
+                )
+                receipt = ExportService._absolute_file_url(pay.receipt_url)
+                payment_lines.append(
+                    " | ".join(
+                        [
+                            pay.payment_id or "",
+                            f"₹{pay.amount}",
+                            ptype,
+                            pmethod,
+                            status_val,
+                            str(pay.payment_date or ""),
+                            (pay.notes or "").strip(),
+                        ]
+                    ).strip(" |")
+                )
+                if receipt:
+                    receipt_urls.append(f"{pay.payment_id}: {receipt}")
+
+            pct = (
+                float((total_paid / estimated * Decimal("100")).quantize(Decimal("0.01")))
+                if estimated > 0
+                else 0.0
+            )
+
+            docs_by_type: dict[str, str] = {}
+            for doc in p.documents or []:
+                dtype = (
+                    doc.document_type.value
+                    if hasattr(doc.document_type, "value")
+                    else str(doc.document_type)
+                )
+                # Keep latest / last seen URL for type
+                docs_by_type[dtype] = ExportService._absolute_file_url(doc.file_url)
+
+            assigned_name = ""
+            assigned_code = ""
+            if p.assigned_to:
+                assigned_name = p.assigned_to.name or ""
+                assigned_code = p.assigned_to.employee_id or ""
+
+            course_name = ""
+            if getattr(p, "course", None) is not None and p.course.name:
+                course_name = (p.course.name or "").strip()
+            elif p.course_id:
+                course_name = course_names.get(p.course_id, "")
+
+            stage_val = (
+                p.stage.value if hasattr(p.stage, "value") else str(p.stage or "")
+            )
+
+            row: list[Any] = [
+                p.prospect_id,
+                p.name or "",
+                p.email or "",
+                p.phone or "",
+                str(p.dob or ""),
+                p.father_name or "",
+                p.mother_name or "",
+                course_name,
+                p.specialization or "",
+                getattr(p, "university", None) or "",
+                p.address or "",
+                p.delivery_address or "",
+                str(p.delivery_date or ""),
+                float(estimated),
+                float(total_paid),
+                pct,
+                stage_val,
+                p.source or "",
+                str(p.follow_up_date or ""),
+                assigned_name,
+                assigned_code,
+                "Yes" if p.exam_attended else "No",
+                "Yes" if p.exam_certified else "No",
+                p.notes or "",
+                str(p.created_at or ""),
+                str(p.updated_at or ""),
+            ]
+            for dt in doc_types:
+                row.append(docs_by_type.get(dt.value, ""))
+            row.append("\n".join(payment_lines))
+            row.append("\n".join(receipt_urls))
+            rows.append(row)
+
+        return ExportService._to_xlsx(
+            headers,
+            rows,
+            "leads_export.xlsx",
+            "Leads",
+        )
 
     @staticmethod
     def export(

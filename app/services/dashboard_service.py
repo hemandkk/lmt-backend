@@ -70,7 +70,6 @@ def _metrics_for_scope(
     incentive = AnalyticsRepository.incentive_status(
         db,
         employee_id=employee_id,
-        collection=month_collected,
     )
 
     return {
@@ -153,9 +152,7 @@ def _enrich_performance(
                 incentive_amount=(
                     metrics["incentive"].amount if metrics else Decimal("0")
                 ),
-                incentive_rate=(
-                    metrics["incentive"].rate if metrics else Decimal("0")
-                ),
+                incentive_rate=Decimal("0"),
                 exam_attended=(
                     metrics["exam_stats"].attended if metrics else 0
                 ),
@@ -205,23 +202,21 @@ class DashboardService:
         )
 
         # Prefer summed per-employee incentive amounts for admin overview
-        org_collection = overview["payment_collected"].this_month
         slab_progress = AnalyticsRepository.incentive_status(
             db,
             employee_id=employee_id,
-            collection=org_collection,
         )
         total_incentive = sum(
             (e.incentive.amount for e in employees), Decimal("0")
         )
+        total_leads = sum((e.incentive.lead_count for e in employees), 0)
         overview["incentive"] = IncentiveStatusSummary(
             eligible=total_incentive > 0 or bool(slab_progress.get("eligible")),
             amount=total_incentive,
-            rate=Decimal(str(slab_progress.get("rate") or 0)),
-            slab=slab_progress.get("slab") or "per-employee",
-            collection=org_collection,
-            next_bracket_amount=slab_progress.get("next_bracket_amount"),
-            next_bracket_rate=slab_progress.get("next_bracket_rate"),
+            slab="per-employee",
+            lead_count=total_leads,
+            next_bracket_leads=None,
+            next_bracket_incentive=None,
         )
 
         performance = AnalyticsRepository.employee_performance(
@@ -360,23 +355,21 @@ class ReportService:
             date_from=date_from,
             date_to=date_to,
         )
-        org_collection = overview["payment_collected"].this_month
         slab_progress = AnalyticsRepository.incentive_status(
             db,
             employee_id=employee_id,
-            collection=org_collection,
         )
         total_incentive = sum(
             (e.incentive.amount for e in employees), Decimal("0")
         )
+        total_leads = sum((e.incentive.lead_count for e in employees), 0)
         overview["incentive"] = IncentiveStatusSummary(
             eligible=total_incentive > 0 or bool(slab_progress.get("eligible")),
             amount=total_incentive,
-            rate=Decimal(str(slab_progress.get("rate") or 0)),
-            slab=slab_progress.get("slab") or "per-employee",
-            collection=org_collection,
-            next_bracket_amount=slab_progress.get("next_bracket_amount"),
-            next_bracket_rate=slab_progress.get("next_bracket_rate"),
+            slab="per-employee",
+            lead_count=total_leads,
+            next_bracket_leads=None,
+            next_bracket_incentive=None,
         )
 
         performance = AnalyticsRepository.employee_performance(
@@ -624,21 +617,16 @@ class ReportService:
             employees = [user]
 
         items: list[IncentiveReportItem] = []
-        total_collection = Decimal("0")
+        total_leads = 0
         total_incentive = Decimal("0")
         eligible_count = 0
 
         for user in employees:
-            collection = AnalyticsRepository.payment_collected(
+            status = AnalyticsRepository.incentive_status(
                 db,
                 employee_id=user.id,
                 date_from=date_from,
                 date_to=date_to,
-            )
-            status = AnalyticsRepository.incentive_status(
-                db,
-                employee_id=user.id,
-                collection=collection,
             )
             item = IncentiveReportItem(
                 employee_id=user.id,
@@ -646,14 +634,13 @@ class ReportService:
                 employee_name=user.name or "Unknown",
                 eligible=bool(status.get("eligible")),
                 amount=Decimal(str(status.get("amount") or 0)),
-                rate=Decimal(str(status.get("rate") or 0)),
                 slab=status.get("slab"),
-                collection=Decimal(str(status.get("collection") or 0)),
-                next_bracket_amount=status.get("next_bracket_amount"),
-                next_bracket_rate=status.get("next_bracket_rate"),
+                lead_count=int(status.get("lead_count") or 0),
+                next_bracket_leads=status.get("next_bracket_leads"),
+                next_bracket_incentive=status.get("next_bracket_incentive"),
             )
             items.append(item)
-            total_collection += item.collection
+            total_leads += item.lead_count
             total_incentive += item.amount
             if item.eligible:
                 eligible_count += 1
@@ -666,7 +653,7 @@ class ReportService:
             date_to=date_to,
             items=items,
             totals=IncentiveReportTotals(
-                collection=total_collection,
+                lead_count=total_leads,
                 incentive_amount=total_incentive,
                 eligible_count=eligible_count,
                 employee_count=len(items),

@@ -87,25 +87,98 @@ def ensure_schema_updates() -> None:
                 except Exception:
                     pass
 
+        if "incentive_slabs" in tables:
+            slab_cols = {
+                col["name"] for col in inspector.get_columns("incentive_slabs")
+            }
+            had_amount_based = (
+                "min_amount" in slab_cols or "rate_percent" in slab_cols
+            )
+            # Migrate amount/% slabs → lead-count + fixed incentive amount
+            if "min_leads" not in slab_cols:
+                conn.execute(
+                    text(
+                        "ALTER TABLE incentive_slabs "
+                        "ADD COLUMN min_leads INTEGER"
+                    )
+                )
+            if "max_leads" not in slab_cols:
+                conn.execute(
+                    text(
+                        "ALTER TABLE incentive_slabs "
+                        "ADD COLUMN max_leads INTEGER"
+                    )
+                )
+            if "incentive_amount" not in slab_cols:
+                conn.execute(
+                    text(
+                        "ALTER TABLE incentive_slabs "
+                        "ADD COLUMN incentive_amount NUMERIC(12, 2)"
+                    )
+                )
+
+            if had_amount_based:
+                # Old amount-based rows are meaningless under the new scheme
+                conn.execute(text("DELETE FROM incentive_slabs"))
+                for old_col in ("min_amount", "max_amount", "rate_percent"):
+                    if old_col in slab_cols:
+                        conn.execute(
+                            text(
+                                f"ALTER TABLE incentive_slabs "
+                                f"DROP COLUMN IF EXISTS {old_col}"
+                            )
+                        )
+
+            conn.execute(
+                text(
+                    "UPDATE incentive_slabs "
+                    "SET min_leads = 0 "
+                    "WHERE min_leads IS NULL"
+                )
+            )
+            conn.execute(
+                text(
+                    "UPDATE incentive_slabs "
+                    "SET incentive_amount = 0 "
+                    "WHERE incentive_amount IS NULL"
+                )
+            )
+            try:
+                conn.execute(
+                    text(
+                        "ALTER TABLE incentive_slabs "
+                        "ALTER COLUMN min_leads SET NOT NULL"
+                    )
+                )
+                conn.execute(
+                    text(
+                        "ALTER TABLE incentive_slabs "
+                        "ALTER COLUMN incentive_amount SET NOT NULL"
+                    )
+                )
+            except Exception:
+                pass
+
 
 def seed_default_incentive_slabs() -> None:
-    """Seed starter slabs when the table is empty."""
+    """Seed starter lead-count slabs when the table is empty."""
     db = SessionLocal()
     try:
         if db.query(IncentiveSlab).count() > 0:
             return
+        # (min_leads, max_leads, incentive_amount)
         defaults = [
-            (0, 25000, 1),
-            (25000, 50000, 2),
-            (50000, 100000, 3),
-            (100000, None, 5),
+            (0, 9, 0),
+            (10, 15, 500),
+            (16, 25, 1000),
+            (26, None, 2000),
         ]
-        for min_amount, max_amount, rate in defaults:
+        for min_leads, max_leads, amount in defaults:
             db.add(
                 IncentiveSlab(
-                    min_amount=min_amount,
-                    max_amount=max_amount,
-                    rate_percent=rate,
+                    min_leads=min_leads,
+                    max_leads=max_leads,
+                    incentive_amount=amount,
                     is_active=True,
                 )
             )
@@ -167,15 +240,15 @@ def seed_default_admin_user():
                 email="admin@example.com",
                 employee_id="ADM001",
                 name="Admin User",
-                password_hash=hash_password("admin123"),
+                password_hash=hash_password("asdf1234"),
                 role=UserRole.admin,
                 is_active=True,
             )
             db.add(user)
         else:
+            # Keep existing password — do not reset on every restart
             user.employee_id = "ADM001"
             user.name = "Admin User"
-            user.password_hash = hash_password("admin123")
             user.role = UserRole.admin
             user.is_active = True
         db.commit()
