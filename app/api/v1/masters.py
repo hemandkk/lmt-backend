@@ -8,6 +8,8 @@ from app.db.session import get_db
 from app.dependencies.auth import get_current_user
 from app.dependencies.permissions import require_admin
 from app.schemas.master import (
+    BulkEmployeeMonthlyTargetRequest,
+    BulkEmployeeMonthlyTargetResponse,
     CourseCreate,
     CourseResponse,
     DefaultSalesTargetResponse,
@@ -240,5 +242,132 @@ def clear_employee_sales_target(
     """
     try:
         return MasterService.clear_employee_sales_target(db, employee_id)
+    except ValueError as ex:
+        raise HTTPException(status_code=404, detail=str(ex)) from ex
+
+
+# ==========================================================
+# Monthly targets CRUD (preferred aliases)
+# Master default + per-employee override
+# Fallback: if employee has no target → master default
+# ==========================================================
+
+@router.get(
+    "/monthly-targets",
+    response_model=SalesTargetOverviewResponse,
+)
+def list_monthly_targets(
+    db: Session = Depends(get_db),
+    user: User = Depends(require_admin),
+):
+    """List master default + every employee's assigned/effective target."""
+    return MasterService.get_sales_target_overview(db)
+
+
+@router.get(
+    "/monthly-targets/default",
+    response_model=DefaultSalesTargetResponse,
+)
+def get_monthly_target_default(
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    return MasterService.get_default_sales_target(db)
+
+
+@router.post(
+    "/monthly-targets/default",
+    response_model=DefaultSalesTargetResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+@router.put(
+    "/monthly-targets/default",
+    response_model=DefaultSalesTargetResponse,
+)
+def upsert_monthly_target_default(
+    payload: DefaultSalesTargetUpdate,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_admin),
+):
+    """Create/update org-wide master monthly target."""
+    return MasterService.set_default_sales_target(
+        db, payload.default_monthly_target
+    )
+
+
+@router.get(
+    "/monthly-targets/employees/{employee_id}",
+    response_model=EmployeeSalesTargetItem,
+)
+def get_employee_monthly_target(
+    employee_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_admin),
+):
+    try:
+        return MasterService.get_employee_sales_target(db, employee_id)
+    except ValueError as ex:
+        raise HTTPException(status_code=404, detail=str(ex)) from ex
+
+
+@router.post(
+    "/monthly-targets/employees/{employee_id}",
+    response_model=EmployeeSalesTargetItem,
+    status_code=status.HTTP_201_CREATED,
+)
+@router.put(
+    "/monthly-targets/employees/{employee_id}",
+    response_model=EmployeeSalesTargetItem,
+)
+@router.patch(
+    "/monthly-targets/employees/{employee_id}",
+    response_model=EmployeeSalesTargetItem,
+)
+def set_employee_monthly_target(
+    employee_id: int,
+    payload: EmployeeSalesTargetAssign,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_admin),
+):
+    """Assign/update a custom monthly target for one employee."""
+    try:
+        return MasterService.assign_employee_sales_target(
+            db, employee_id, payload
+        )
+    except ValueError as ex:
+        raise HTTPException(status_code=404, detail=str(ex)) from ex
+
+
+@router.delete(
+    "/monthly-targets/employees/{employee_id}",
+    response_model=EmployeeSalesTargetItem,
+)
+def delete_employee_monthly_target(
+    employee_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_admin),
+):
+    """Clear employee target so master default is used for calculations."""
+    try:
+        return MasterService.clear_employee_sales_target(db, employee_id)
+    except ValueError as ex:
+        raise HTTPException(status_code=404, detail=str(ex)) from ex
+
+
+@router.put(
+    "/monthly-targets/employees",
+    response_model=BulkEmployeeMonthlyTargetResponse,
+)
+def bulk_set_employee_monthly_targets(
+    payload: BulkEmployeeMonthlyTargetRequest,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_admin),
+):
+    """
+    Bulk assign/clear employee targets.
+    Pass monthlyTarget: null to clear (use master default).
+    """
+    try:
+        return MasterService.bulk_assign_employee_sales_targets(db, payload)
     except ValueError as ex:
         raise HTTPException(status_code=404, detail=str(ex)) from ex

@@ -144,3 +144,32 @@ class SalesTargetOverviewResponse(BaseModel):
         serialization_alias="defaultMonthlyTarget"
     )
     employees: list[EmployeeSalesTargetItem]
+
+
+class BulkEmployeeMonthlyTargetItem(BaseModel):
+    model_config = _alias_config()
+
+    employee_id: int = Field(alias="employeeId")
+    monthly_target: Optional[Decimal] = Field(
+        default=None, ge=0, alias="monthlyTarget"
+    )
+
+
+class BulkEmployeeMonthlyTargetRequest(BaseModel):
+    """
+    Assign/clear targets for many employees.
+    monthlyTarget=null clears assignment (master default applies).
+    """
+
+    model_config = _alias_config()
+
+    items: list[BulkEmployeeMonthlyTargetItem]
+
+
+class BulkEmployeeMonthlyTargetResponse(BaseModel):
+    model_config = _alias_config()
+
+    default_monthly_target: Decimal = Field(
+        serialization_alias="defaultMonthlyTarget"
+    )
+    employees: list[EmployeeSalesTargetItem]

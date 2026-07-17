@@ -10,6 +10,8 @@ from app.repositories.course_repository import CourseRepository
 from app.repositories.incentive_repository import IncentiveRepository
 from app.repositories.settings_repository import SettingsRepository
 from app.schemas.master import (
+    BulkEmployeeMonthlyTargetRequest,
+    BulkEmployeeMonthlyTargetResponse,
     CourseCreate,
     DefaultSalesTargetResponse,
     EmployeeSalesTargetAssign,
@@ -267,4 +269,93 @@ class MasterService:
             effective_target=effective,
             target_assigned=assigned,
             target_source=source,
+        )
+
+    @staticmethod
+    def get_employee_sales_target(
+        db: Session, employee_id: int
+    ) -> EmployeeSalesTargetItem:
+        user = (
+            db.query(User)
+            .filter(
+                User.id == employee_id,
+                User.role == UserRole.employee,
+            )
+            .first()
+        )
+        if not user:
+            raise ValueError("Employee not found.")
+
+        effective, assigned, source = resolve_employee_monthly_target(db, user)
+        return EmployeeSalesTargetItem(
+            employee_id=user.id,
+            employee_code=user.employee_id,
+            employee_name=user.name or "Unknown",
+            assigned_target=(
+                Decimal(str(user.monthly_sales_target))
+                if user.monthly_sales_target is not None
+                else None
+            ),
+            effective_target=effective,
+            target_assigned=assigned,
+            target_source=source,
+        )
+
+    @staticmethod
+    def bulk_assign_employee_sales_targets(
+        db: Session,
+        payload: BulkEmployeeMonthlyTargetRequest,
+    ) -> BulkEmployeeMonthlyTargetResponse:
+        results: list[EmployeeSalesTargetItem] = []
+        for item in payload.items:
+            user = (
+                db.query(User)
+                .filter(
+                    User.id == item.employee_id,
+                    User.role == UserRole.employee,
+                )
+                .first()
+            )
+            if not user:
+                raise ValueError(f"Employee not found: {item.employee_id}")
+
+            if item.monthly_target is None:
+                user.monthly_sales_target = None
+            else:
+                user.monthly_sales_target = item.monthly_target
+
+        db.commit()
+
+        for item in payload.items:
+            user = (
+                db.query(User)
+                .filter(User.id == item.employee_id)
+                .first()
+            )
+            if not user:
+                continue
+            effective, assigned, source = resolve_employee_monthly_target(
+                db, user
+            )
+            results.append(
+                EmployeeSalesTargetItem(
+                    employee_id=user.id,
+                    employee_code=user.employee_id,
+                    employee_name=user.name or "Unknown",
+                    assigned_target=(
+                        Decimal(str(user.monthly_sales_target))
+                        if user.monthly_sales_target is not None
+                        else None
+                    ),
+                    effective_target=effective,
+                    target_assigned=assigned,
+                    target_source=source,
+                )
+            )
+
+        return BulkEmployeeMonthlyTargetResponse(
+            default_monthly_target=SettingsRepository.get_default_monthly_sales_target(
+                db
+            ),
+            employees=results,
         )
