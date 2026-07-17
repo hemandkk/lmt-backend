@@ -1,3 +1,5 @@
+from datetime import datetime, timezone
+
 from fastapi import (
     APIRouter,
     Depends,
@@ -28,6 +30,9 @@ from app.core.security import (
     decode_token,
 )
 
+from app.dependencies.auth import get_current_user
+from app.db.models.user import User
+
 router = APIRouter(
     prefix="/auth",
     tags=["Authentication"],
@@ -51,6 +56,9 @@ def login(
         )
 
     user, access_token = result
+
+    user.last_login = datetime.now(timezone.utc)
+    db.commit()
 
     refresh_token = create_refresh_token(
         {
@@ -95,6 +103,35 @@ def refresh(
             detail="Invalid token",
         )
 
+    if not user.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Inactive user.",
+        )
+
+    token_iat = claims.get("iat")
+    if token_iat is not None and user.last_logout is not None:
+        if isinstance(token_iat, (int, float)):
+            token_iat_dt = datetime.fromtimestamp(
+                token_iat, tz=timezone.utc
+            )
+        else:
+            token_iat_dt = token_iat
+            if token_iat_dt.tzinfo is None:
+                token_iat_dt = token_iat_dt.replace(
+                    tzinfo=timezone.utc
+                )
+
+        last_logout = user.last_logout
+        if last_logout.tzinfo is None:
+            last_logout = last_logout.replace(tzinfo=timezone.utc)
+
+        if token_iat_dt <= last_logout:
+            raise HTTPException(
+                status_code=401,
+                detail="Token has been revoked",
+            )
+
     access_token = create_access_token(
         {
             "sub": str(user.id),
@@ -108,7 +145,13 @@ def refresh(
 
 
 @router.post("/logout")
-def logout():
+def logout(
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    current_user.last_logout = datetime.now(timezone.utc)
+    db.commit()
+
     return {
-        "message": "Logged out"
+        "message": "Logged out successfully"
     }

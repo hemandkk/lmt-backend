@@ -1,3 +1,4 @@
+from datetime import datetime, timezone
 from typing import Optional
 
 from fastapi import Depends, HTTPException, status
@@ -57,6 +58,26 @@ def get_current_user(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Inactive user.",
         )
+
+    token_iat = payload.get("iat")
+    if token_iat is not None and user.last_logout is not None:
+        if isinstance(token_iat, (int, float)):
+            token_iat_dt = datetime.fromtimestamp(
+                token_iat, tz=timezone.utc
+            )
+        else:
+            token_iat_dt = token_iat
+            if token_iat_dt.tzinfo is None:
+                token_iat_dt = token_iat_dt.replace(
+                    tzinfo=timezone.utc
+                )
+
+        last_logout = user.last_logout
+        if last_logout.tzinfo is None:
+            last_logout = last_logout.replace(tzinfo=timezone.utc)
+
+        if token_iat_dt <= last_logout:
+            raise credentials_exception
 
     return user
 

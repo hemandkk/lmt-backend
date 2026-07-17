@@ -62,3 +62,8 @@ create foreign keys
 run every subsequent migration
 
 Your database is now fully initialized.
+
+
+# Mimo
+mimo auth login
+mimo

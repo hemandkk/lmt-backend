@@ -26,12 +26,13 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
 
 
 def create_access_token(data: dict):
+    now = datetime.now(timezone.utc)
     payload = data.copy()
 
     payload["type"] = "access"
-    payload["exp"] = (
-        datetime.now(timezone.utc)
-        + timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
+    payload["iat"] = now
+    payload["exp"] = now + timedelta(
+        minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES
     )
 
     return jwt.encode(
@@ -42,12 +43,13 @@ def create_access_token(data: dict):
 
 
 def create_refresh_token(data: dict):
+    now = datetime.now(timezone.utc)
     payload = data.copy()
 
     payload["type"] = "refresh"
-    payload["exp"] = (
-        datetime.now(timezone.utc)
-        + timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS)
+    payload["iat"] = now
+    payload["exp"] = now + timedelta(
+        days=settings.REFRESH_TOKEN_EXPIRE_DAYS
     )
 
     return jwt.encode(
