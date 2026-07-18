@@ -18,6 +18,8 @@ ADMISSION_STAGE_LABELS = {
     "exam_attended": "Exam Attended",
     "waiting_for_100_percent_payment": "Waiting for 100% payment",
     "certificate_waiting": "Certificate waiting",
+    "waiting_result": "Waiting result",
+    "result_announced": "Result announced",
 }
 
 
