@@ -52,17 +52,23 @@ def list_employees(
     ),
     role: Optional[str] = Query(
         None,
-        description="Filter by role: employee | accountant | processing_team",
+        description=(
+            "Filter by role: employee | accountant | processing_team | "
+            "manager | sales_head"
+        ),
     ),
     sales_only: bool = Query(
         False,
         alias="salesOnly",
-        description="If true, only sales employees (excludes accountant/processing).",
+        description=(
+            "If true, only role=employee (for lead-assign / performance "
+            "dropdowns; excludes managers, sales_head, accountant, processing)."
+        ),
     ),
     db: Session = Depends(get_db),
     current_user: User = Depends(require_admin),
 ):
-    """Admin: paginated staff directory (employee / accountant / processing_team)."""
+    """Admin: paginated staff directory (all assignable roles)."""
     resolved_active = is_active
     if status_filter is not None:
         key = status_filter.strip().lower()

@@ -28,7 +28,7 @@ from app.core.roles import (
     can_change_admission_stage,
     can_mutate_leads,
     intersect_admission_filters,
-    is_employee,
+    is_sales_user,
     prospect_visible_to_user,
     visible_admission_stages_for_role,
 )
@@ -341,8 +341,8 @@ def _parse_multipart_lead(form, model_cls):
 
 
 def _employee_scope_id(user: User) -> int | None:
-    """Sales employees only see their own leads."""
-    if is_employee(user):
+    """Sales roles (employee/manager/sales_head) only see their own leads."""
+    if is_sales_user(user):
         return user.id
     return None
 
@@ -533,7 +533,7 @@ async def create_prospect(
             )
 
             # Employees always own leads they create; admin may pass assignedToId
-            if current_user and current_user.role == UserRole.employee:
+            if current_user and is_sales_user(current_user):
                 payload.assigned_to_id = current_user.id
 
             return ProspectService.create(
@@ -546,7 +546,7 @@ async def create_prospect(
 
         body = await request.json()
         payload = ProspectCreate.model_validate(body)
-        if current_user and current_user.role == UserRole.employee:
+        if current_user and is_sales_user(current_user):
             payload.assigned_to_id = current_user.id
 
         return ProspectService.create(db, payload, actor_id=actor_id)
@@ -588,15 +588,15 @@ async def update_prospect(
             payload, document_files, receipt_files = _parse_multipart_lead(
                 form, ProspectUpdate
             )
-            # Employees cannot reassign leads to someone else
+            # Non-admin sales users cannot reassign leads to someone else
             if (
-                current_user.role == UserRole.employee
+                is_sales_user(current_user)
                 and payload.assigned_to_id is not None
                 and payload.assigned_to_id != current_user.id
             ):
                 raise HTTPException(
                     status_code=403,
-                    detail="Employees cannot reassign leads.",
+                    detail="You cannot reassign leads.",
                 )
             return ProspectService.update(
                 db,
@@ -610,13 +610,13 @@ async def update_prospect(
         body = await request.json()
         payload = ProspectUpdate.model_validate(body)
         if (
-            current_user.role == UserRole.employee
+            is_sales_user(current_user)
             and payload.assigned_to_id is not None
             and payload.assigned_to_id != current_user.id
         ):
             raise HTTPException(
                 status_code=403,
-                detail="Employees cannot reassign leads.",
+                detail="You cannot reassign leads.",
             )
         return ProspectService.update(
             db, prospect_id, payload, actor_id=actor_id

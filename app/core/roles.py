@@ -33,11 +33,35 @@ ASSIGNABLE_ROLES = frozenset(
         UserRole.employee,
         UserRole.accountant,
         UserRole.processing_team,
+        UserRole.manager,
+        UserRole.sales_head,
     }
 )
 
-# Sales performance / targets / dashboard employee lists
-SALES_ROLES = frozenset({UserRole.employee})
+# Roles that own leads / mutate CRM like sales staff
+SALES_ROLES = frozenset(
+    {
+        UserRole.employee,
+        UserRole.manager,
+        UserRole.sales_head,
+    }
+)
+
+# Team dashboard viewers (supervisors + admin)
+TEAM_VIEWER_ROLES = frozenset(
+    {
+        UserRole.admin,
+        UserRole.manager,
+        UserRole.sales_head,
+    }
+)
+
+SUPERVISOR_ROLES = frozenset(
+    {
+        UserRole.manager,
+        UserRole.sales_head,
+    }
+)
 
 
 def normalize_role(value: Any) -> UserRole:
@@ -58,8 +82,12 @@ def normalize_role(value: Any) -> UserRole:
         "processing_team": UserRole.processing_team,
         "processing": UserRole.processing_team,
         "processingteam": UserRole.processing_team,
-        "procession_team": UserRole.processing_team,  # common typo
+        "procession_team": UserRole.processing_team,
         "processionteam": UserRole.processing_team,
+        "manager": UserRole.manager,
+        "sales_head": UserRole.sales_head,
+        "saleshead": UserRole.sales_head,
+        "sales_heads": UserRole.sales_head,
     }
     if snake in aliases:
         return aliases[snake]
@@ -91,15 +119,32 @@ def is_processing_team(user: User) -> bool:
     return user.role == UserRole.processing_team
 
 
+def is_manager(user: User) -> bool:
+    return user.role == UserRole.manager
+
+
+def is_sales_head(user: User) -> bool:
+    return user.role == UserRole.sales_head
+
+
+def is_team_supervisor(user: User) -> bool:
+    return user.role in SUPERVISOR_ROLES
+
+
+def is_sales_user(user: User) -> bool:
+    """Employee / manager / sales_head — own-lead CRM scope."""
+    return user.role in SALES_ROLES
+
+
 def can_mutate_leads(user: User) -> bool:
     """Create/edit leads, CRM stage, exam, docs, add payment."""
-    return user.role in (UserRole.admin, UserRole.employee)
+    return user.role in (UserRole.admin, *SALES_ROLES)
 
 
 def can_change_admission_stage(user: User) -> bool:
     return user.role in (
         UserRole.admin,
-        UserRole.employee,
+        *SALES_ROLES,
         UserRole.processing_team,
     )
 
@@ -110,6 +155,10 @@ def can_set_restricted_admission_stage(user: User) -> bool:
 
 def can_verify_payments(user: User) -> bool:
     return user.role in (UserRole.admin, UserRole.accountant)
+
+
+def can_view_team_dashboard(user: User) -> bool:
+    return user.role in TEAM_VIEWER_ROLES
 
 
 def admission_stage_allowed_for_role(
@@ -128,7 +177,7 @@ def visible_admission_stages_for_role(
 ) -> Optional[frozenset[AdmissionStage]]:
     """
     Forced admission-stage visibility for list/get.
-    None = no force filter (admin / employee use other scopes).
+    None = no force filter (admin / sales users use other scopes).
     """
     if user.role == UserRole.accountant:
         return ACCOUNTANT_VISIBLE_STAGES
@@ -140,7 +189,7 @@ def visible_admission_stages_for_role(
 def prospect_visible_to_user(prospect, user: User) -> bool:
     if is_admin(user):
         return True
-    if is_employee(user):
+    if is_sales_user(user):
         return prospect.assigned_to_id == user.id
 
     stage = getattr(prospect, "admission_stage", None)
@@ -163,11 +212,6 @@ def intersect_admission_filters(
     """
     Combine client admissionStage(s) with role-forced visibility.
     Returns None = no admission filter; list = IN filter.
-
-    For accountant / processing_team, forced stages always apply.
-    Client filters may narrow within that set; incompatible filters
-    (e.g. accountant + waiting_result) fall back to the full forced set
-    so outdated frontend query params still return the correct leads.
     """
     if forced is None and not requested:
         return None

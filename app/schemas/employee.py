@@ -28,6 +28,12 @@ class EmployeeCreate(BaseModel):
     )
     is_active: bool = Field(default=True, alias="isActive")
     role: Optional[str] = Field(default="employee")
+    reports_to_manager_id: Optional[int] = Field(
+        default=None, alias="reportsToManagerId"
+    )
+    reports_to_sales_head_id: Optional[int] = Field(
+        default=None, alias="reportsToSalesHeadId"
+    )
 
     @field_validator("role", mode="before")
     @classmethod
@@ -37,6 +43,15 @@ class EmployeeCreate(BaseModel):
         from app.core.roles import normalize_role
 
         return normalize_role(value).value
+
+    @field_validator(
+        "reports_to_manager_id", "reports_to_sales_head_id", mode="before"
+    )
+    @classmethod
+    def empty_supervisor_to_none(cls, value: Any) -> Any:
+        if value == "" or value is None:
+            return None
+        return value
 
 
 class EmployeeUpdate(BaseModel):
@@ -59,6 +74,12 @@ class EmployeeUpdate(BaseModel):
     )
     is_active: Optional[bool] = Field(default=None, alias="isActive")
     role: Optional[str] = None
+    reports_to_manager_id: Optional[int] = Field(
+        default=None, alias="reportsToManagerId"
+    )
+    reports_to_sales_head_id: Optional[int] = Field(
+        default=None, alias="reportsToSalesHeadId"
+    )
 
     @field_validator("role", mode="before")
     @classmethod
@@ -68,6 +89,15 @@ class EmployeeUpdate(BaseModel):
         from app.core.roles import normalize_role
 
         return normalize_role(value).value
+
+    @field_validator(
+        "reports_to_manager_id", "reports_to_sales_head_id", mode="before"
+    )
+    @classmethod
+    def empty_supervisor_to_none(cls, value: Any) -> Any:
+        if value == "":
+            return None
+        return value
 
 
 class EmployeeResponse(BaseModel):
@@ -97,6 +127,18 @@ class EmployeeResponse(BaseModel):
     target_source: str = Field(serialization_alias="targetSource")
     leads_assigned: int = Field(default=0, serialization_alias="leadsAssigned")
     revenue: Decimal = Field(default=Decimal("0"))
+    reports_to_manager_id: Optional[int] = Field(
+        default=None, serialization_alias="reportsToManagerId"
+    )
+    reports_to_manager_name: Optional[str] = Field(
+        default=None, serialization_alias="reportsToManagerName"
+    )
+    reports_to_sales_head_id: Optional[int] = Field(
+        default=None, serialization_alias="reportsToSalesHeadId"
+    )
+    reports_to_sales_head_name: Optional[str] = Field(
+        default=None, serialization_alias="reportsToSalesHeadName"
+    )
     last_login: Optional[datetime] = Field(
         default=None, serialization_alias="lastLogin"
     )

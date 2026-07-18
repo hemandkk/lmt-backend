@@ -137,8 +137,13 @@ def ensure_schema_updates() -> None:
                     )
                 )
 
-            # Extend PostgreSQL userrole enum for accountant / processing_team
-            for role_value in ("accountant", "processing_team"):
+            # Extend PostgreSQL userrole enum for staff roles
+            for role_value in (
+                "accountant",
+                "processing_team",
+                "manager",
+                "sales_head",
+            ):
                 try:
                     conn.execute(
                         text(
@@ -147,13 +152,45 @@ def ensure_schema_updates() -> None:
                         )
                     )
                 except Exception:
-                    # Older PG without IF NOT EXISTS — ignore if already present
                     try:
                         conn.execute(
-                            text(f"ALTER TYPE userrole ADD VALUE '{role_value}'")
+                            text(
+                                f"ALTER TYPE userrole ADD VALUE '{role_value}'"
+                            )
                         )
                     except Exception:
                         pass
+
+            if "reports_to_manager_id" not in user_cols:
+                conn.execute(
+                    text(
+                        "ALTER TABLE users "
+                        "ADD COLUMN reports_to_manager_id INTEGER "
+                        "REFERENCES users(id) ON DELETE SET NULL"
+                    )
+                )
+                conn.execute(
+                    text(
+                        "CREATE INDEX IF NOT EXISTS "
+                        "ix_users_reports_to_manager_id "
+                        "ON users (reports_to_manager_id)"
+                    )
+                )
+            if "reports_to_sales_head_id" not in user_cols:
+                conn.execute(
+                    text(
+                        "ALTER TABLE users "
+                        "ADD COLUMN reports_to_sales_head_id INTEGER "
+                        "REFERENCES users(id) ON DELETE SET NULL"
+                    )
+                )
+                conn.execute(
+                    text(
+                        "CREATE INDEX IF NOT EXISTS "
+                        "ix_users_reports_to_sales_head_id "
+                        "ON users (reports_to_sales_head_id)"
+                    )
+                )
 
         if "payments" in tables:
             pay_cols = {col["name"] for col in inspector.get_columns("payments")}

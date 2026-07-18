@@ -6,8 +6,9 @@ from sqlalchemy.orm import Session
 from app.core.roles import (
     can_mutate_leads,
     can_verify_payments,
+    can_view_team_dashboard,
     is_admin,
-    is_employee,
+    is_sales_user,
     prospect_visible_to_user,
 )
 from app.db.models.user import User, UserRole
@@ -29,7 +30,7 @@ def require_admin(
 def require_employee(
     current_user: User = Depends(get_current_user),
 ) -> User:
-    if current_user.role not in (UserRole.admin, UserRole.employee):
+    if not (is_admin(current_user) or is_sales_user(current_user)):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Access denied.",
@@ -40,7 +41,7 @@ def require_employee(
 def require_lead_mutator(
     current_user: User = Depends(get_current_user),
 ) -> User:
-    """Admin or sales employee — create/edit leads, CRM stage, exam, payments, docs."""
+    """Admin or sales staff — create/edit leads, CRM stage, exam, payments, docs."""
     if not can_mutate_leads(current_user):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -60,6 +61,17 @@ def require_payment_verifier(
     return current_user
 
 
+def require_team_viewer(
+    current_user: User = Depends(get_current_user),
+) -> User:
+    if not can_view_team_dashboard(current_user):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Team dashboard access requires admin, manager, or sales_head.",
+        )
+    return current_user
+
+
 def resolve_employee_scope(
     current_user: User,
     requested_employee_id: Optional[int] = None,
@@ -67,11 +79,11 @@ def resolve_employee_scope(
     """
     Resolve which employee_id to filter by.
 
-    - Sales employee: always forced to their own id.
+    - Sales roles (employee/manager/sales_head): always forced to their own id.
     - Admin: None = all users; or requested_employee_id if provided.
     - Accountant / processing_team: no assignee scope (admission filters apply).
     """
-    if is_employee(current_user):
+    if is_sales_user(current_user):
         return current_user.id
 
     if is_admin(current_user):

@@ -8,21 +8,20 @@ from sqlalchemy import (
     DateTime,
     ForeignKey,
     Numeric,
-    func
-)
-from sqlalchemy.orm import (
-    Mapped,
-    mapped_column
 )
 from sqlalchemy.orm import relationship
 from app.db.base import Base
 from app.db.mixins import TimestampMixin
+
 
 class UserRole(str, enum.Enum):
     admin = "admin"
     employee = "employee"
     accountant = "accountant"
     processing_team = "processing_team"
+    manager = "manager"
+    sales_head = "sales_head"
+
 
 class User(TimestampMixin, Base):
     __tablename__ = "users"
@@ -33,14 +32,14 @@ class User(TimestampMixin, Base):
         String(255),
         unique=True,
         nullable=False,
-        index=True
+        index=True,
     )
 
     employee_id = Column(
         String(50),
         unique=True,
         nullable=True,
-        index=True
+        index=True,
     )
 
     name = Column(String(255))
@@ -53,23 +52,37 @@ class User(TimestampMixin, Base):
 
     password_hash = Column(
         String,
-        nullable=False
+        nullable=False,
     )
 
     role = Column(
         Enum(UserRole),
-        nullable=False
+        nullable=False,
     )
 
     is_active = Column(
         Boolean,
-        default=True
+        default=True,
     )
 
     monthly_sales_target = Column(
         Numeric(12, 2),
         nullable=True,
         default=None,
+    )
+
+    reports_to_manager_id = Column(
+        Integer,
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+
+    reports_to_sales_head_id = Column(
+        Integer,
+        ForeignKey("users.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
     )
 
     last_login = Column(
@@ -80,11 +93,6 @@ class User(TimestampMixin, Base):
         DateTime(timezone=True)
     )
 
-    """ profile = relationship(
-        "EmployeeProfile",
-        back_populates="user",
-        uselist=False
-    ) """
     prospects = relationship(
         "Prospect",
         back_populates="assigned_to",
@@ -100,4 +108,18 @@ class User(TimestampMixin, Base):
     activity_logs = relationship(
         "ActivityLog",
         back_populates="user",
+    )
+
+    reports_to_manager = relationship(
+        "User",
+        remote_side=[id],
+        foreign_keys=[reports_to_manager_id],
+        backref="managed_employees",
+    )
+
+    reports_to_sales_head = relationship(
+        "User",
+        remote_side=[id],
+        foreign_keys=[reports_to_sales_head_id],
+        backref="sales_head_employees",
     )

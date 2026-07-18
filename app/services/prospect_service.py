@@ -40,21 +40,23 @@ class ProspectService:
 
     @staticmethod
     def _validate_assignee(db: Session, assigned_to_id: Optional[int]) -> None:
-        """Ensure assignee is an active employee when provided."""
+        """Ensure assignee is an active sales user when provided."""
         if assigned_to_id is None:
             return
+        from app.core.roles import SALES_ROLES
+
         user = (
             db.query(User)
             .filter(
                 User.id == assigned_to_id,
-                User.role == UserRole.employee,
+                User.role.in_(list(SALES_ROLES)),
                 User.is_active.is_(True),
             )
             .first()
         )
         if not user:
             raise ValueError(
-                "assignedToId must be an active employee."
+                "assignedToId must be an active employee, manager, or sales_head."
             )
 
     @staticmethod
