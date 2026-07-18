@@ -160,7 +160,7 @@ EXTRA_SYNC_HEADERS = [
     "Balance Amount",
     "Certificate Status",
     "Exam Attended",
-    "Exam Certified",
+    "Certificate Delivered",
 ]
 
 
