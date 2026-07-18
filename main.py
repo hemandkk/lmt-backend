@@ -81,6 +81,22 @@ def ensure_schema_updates() -> None:
                     )
                 )
 
+            if "admission_stage" not in existing:
+                conn.execute(
+                    text(
+                        "ALTER TABLE prospects "
+                        "ADD COLUMN admission_stage VARCHAR(50) "
+                        "NOT NULL DEFAULT 'registered'"
+                    )
+                )
+                conn.execute(
+                    text(
+                        "CREATE INDEX IF NOT EXISTS "
+                        "ix_prospects_admission_stage "
+                        "ON prospects (admission_stage)"
+                    )
+                )
+
         if "users" in tables:
             user_cols = {col["name"] for col in inspector.get_columns("users")}
             if "monthly_sales_target" not in user_cols:

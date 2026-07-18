@@ -45,6 +45,7 @@ class ExportService:
         *,
         search: str | None = None,
         stage: str | None = None,
+        admission_stage: str | None = None,
         assigned_to_id: int | None = None,
         course_id: int | None = None,
     ) -> StreamingResponse:
@@ -52,10 +53,19 @@ class ExportService:
         Full lead export matching list filters.
         Includes create/edit fields (no password) + document & payment file links.
         """
+        parsed_admission = None
+        if admission_stage:
+            from app.services.admission_stage_service import (
+                parse_admission_stage,
+            )
+
+            parsed_admission = parse_admission_stage(admission_stage).value
+
         prospects = ProspectRepository.list_for_export(
             db,
             search=search,
             stage=stage,
+            admission_stage=parsed_admission,
             assigned_to_id=assigned_to_id,
             course_id=course_id,
         )
@@ -89,6 +99,7 @@ class ExportService:
             "Payment %",
             "Stage",
             "Current Lead Stage",
+            "Admission Stage",
             "Source",
             "Follow-up Date",
             "Next Follow-up",
@@ -221,6 +232,7 @@ class ExportService:
                 pct,
                 stage_val,
                 extra.get("current_lead_stage", stage_val),
+                extra.get("admission_stage", ""),
                 p.source or "",
                 extra.get("follow_up_date", ""),
                 extra.get("next_follow_up", ""),

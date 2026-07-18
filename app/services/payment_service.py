@@ -70,17 +70,28 @@ class PaymentService:
             created_by=current_user_id,
         )
         created = self.payment_repo.create(payment)
-        self._sync_sheets(payment_in.prospect_id, current_user_id)
+        self._after_payment_change(
+            payment_in.prospect_id, current_user_id
+        )
         return created
+
+    def _after_payment_change(
+        self, prospect_id: int, actor_id: int | None = None
+    ) -> None:
+        from app.services.google_sheets_service import GoogleSheetsService
+        from app.services.prospect_service import ProspectService
+
+        ProspectService.refresh_admission_stage(
+            self.db, prospect_id, actor_id=actor_id
+        )
+        GoogleSheetsService.sync_prospect_by_id(
+            self.db, prospect_id, actor_id=actor_id
+        )
 
     def _sync_sheets(
         self, prospect_id: int, actor_id: int | None = None
     ) -> None:
-        from app.services.google_sheets_service import GoogleSheetsService
-
-        GoogleSheetsService.sync_prospect_by_id(
-            self.db, prospect_id, actor_id=actor_id
-        )
+        self._after_payment_change(prospect_id, actor_id)
 
     def get_payment(self, payment_id: int) -> Payment | None:
         return self.payment_repo.get_by_id(payment_id)

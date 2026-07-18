@@ -85,7 +85,8 @@ class User(TimestampMixin, Base):
     ) """
     prospects = relationship(
         "Prospect",
-        back_populates="assigned_to"
+        back_populates="assigned_to",
+        foreign_keys="Prospect.assigned_to_id",
     )
 
     notifications = relationship(

@@ -52,6 +52,18 @@ class StageUpdateRequest(BaseModel):
     stage: str
 
 
+class AdmissionStageUpdateRequest(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    admission_stage: str = Field(
+        validation_alias=AliasChoices(
+            "admissionStage",
+            "admission_stage",
+            "stage",
+        ),
+    )
+
+
 class AssignProspectRequest(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 
@@ -356,6 +368,7 @@ def list_prospects(
     page_size: int = Query(20, alias="pageSize", ge=1, le=100),
     search: str | None = None,
     stage: str | None = None,
+    admission_stage: str | None = Query(None, alias="admissionStage"),
     course_id: int | None = Query(None, alias="courseId"),
     assigned_to_id: int | None = Query(None, alias="assignedToId"),
     db: Session = Depends(get_db),
@@ -364,6 +377,12 @@ def list_prospects(
     """
     Admin: all prospects (optional assignedToId / courseId filter).
     Employee: only prospects assigned to the logged-in user.
+
+    Filters:
+    - stage: CRM stage (new, won, …)
+    - admissionStage: admission funnel
+      (registered, fifty_percent_paid, exam_attended,
+       waiting_for_100_percent_payment, certificate_waiting)
     """
     scope_id = _employee_scope_id(current_user)
     if scope_id is not None:
@@ -372,21 +391,26 @@ def list_prospects(
     elif assigned_to_id is None:
         assigned_to_id = None  # admin sees all
 
-    return ProspectService.list(
-        db,
-        page,
-        page_size,
-        search,
-        stage,
-        assigned_to_id=assigned_to_id,
-        course_id=course_id,
-    )
+    try:
+        return ProspectService.list(
+            db,
+            page,
+            page_size,
+            search,
+            stage,
+            admission_stage=admission_stage,
+            assigned_to_id=assigned_to_id,
+            course_id=course_id,
+        )
+    except ValueError as ex:
+        raise HTTPException(status_code=400, detail=str(ex)) from ex
 
 
 @router.get("/export")
 def export_prospects(
     search: str | None = None,
     stage: str | None = None,
+    admission_stage: str | None = Query(None, alias="admissionStage"),
     course_id: int | None = Query(None, alias="courseId"),
     assigned_to_id: int | None = Query(None, alias="assignedToId"),
     db: Session = Depends(get_db),
@@ -395,7 +419,7 @@ def export_prospects(
     """
     Download filtered leads as Excel (.xlsx).
 
-    Same filters as list (stage, search, courseId, assignedToId).
+    Same filters as list (stage, admissionStage, search, courseId, assignedToId).
     Includes create/edit fields (password excluded) plus absolute
     document and payment receipt URLs for verification.
     """
@@ -408,6 +432,7 @@ def export_prospects(
             db,
             search=search,
             stage=stage,
+            admission_stage=admission_stage,
             assigned_to_id=assigned_to_id,
             course_id=course_id,
         )
@@ -977,6 +1002,39 @@ def update_stage(
             else status.HTTP_404_NOT_FOUND
         )
         raise HTTPException(status_code=status_code, detail=detail)
+
+
+@router.patch(
+    "/{prospect_id}/admission-stage",
+    response_model=ProspectResponse,
+)
+def update_admission_stage(
+    prospect_id: int,
+    payload: AdmissionStageUpdateRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Listing-page update for admission funnel stage.
+    Does not change CRM `stage` (new/won/…).
+    """
+    try:
+        prospect = ProspectService.get(db, prospect_id)
+        _ensure_prospect_access(prospect, current_user)
+        return ProspectService.change_admission_stage(
+            db,
+            prospect_id,
+            payload.admission_stage,
+            actor_id=current_user.id,
+        )
+    except ValueError as ex:
+        detail = str(ex)
+        status_code = (
+            status.HTTP_400_BAD_REQUEST
+            if "admission stage" in detail.lower()
+            else status.HTTP_404_NOT_FOUND
+        )
+        raise HTTPException(status_code=status_code, detail=detail) from ex
 
 
 @router.patch("/{prospect_id}/assign", response_model=ProspectResponse)

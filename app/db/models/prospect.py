@@ -33,6 +33,16 @@ class ProspectStage(str, enum.Enum):
     lost = "lost"
 
 
+class AdmissionStage(str, enum.Enum):
+    """Admission funnel stage (separate from CRM ProspectStage)."""
+
+    registered = "registered"
+    fifty_percent_paid = "fifty_percent_paid"
+    exam_attended = "exam_attended"
+    waiting_for_100_percent_payment = "waiting_for_100_percent_payment"
+    certificate_waiting = "certificate_waiting"
+
+
 class Prospect(TimestampMixin, Base):
 
     __tablename__ = "prospects"
@@ -134,6 +144,18 @@ class Prospect(TimestampMixin, Base):
     stage = Column(
         Enum(ProspectStage),
         default=ProspectStage.new,
+        nullable=False,
+        index=True,
+    )
+
+    admission_stage = Column(
+        Enum(
+            AdmissionStage,
+            values_callable=lambda obj: [e.value for e in obj],
+            native_enum=False,
+            length=50,
+        ),
+        default=AdmissionStage.registered,
         nullable=False,
         index=True,
     )

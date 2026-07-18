@@ -14,7 +14,7 @@ from pydantic import (
 )
 
 from app.db.models.payment import PaymentMethod, PaymentStatus, PaymentType
-from app.db.models.prospect import ProspectStage
+from app.db.models.prospect import AdmissionStage, ProspectStage
 from app.db.models.prospect_document import DocumentType
 
 
@@ -209,6 +209,9 @@ class ProspectCreate(BaseModel):
         default=None, alias="followUpDate"
     )
     stage: Optional[ProspectStage] = None
+    admission_stage: Optional[AdmissionStage] = Field(
+        default=None, alias="admissionStage"
+    )
 
     payments: list[LeadPaymentInput] = []
     documents: list[LeadDocumentInput] = []
@@ -228,6 +231,15 @@ class ProspectCreate(BaseModel):
         if isinstance(value, str) and value.isdigit():
             return int(value)
         return value
+
+    @field_validator("admission_stage", mode="before")
+    @classmethod
+    def coerce_admission_stage(cls, value: Any) -> Any:
+        if value is None or value == "":
+            return None
+        from app.services.admission_stage_service import parse_admission_stage
+
+        return parse_admission_stage(value)
 
 
 # --------------------------------------------------
@@ -262,6 +274,9 @@ class ProspectUpdate(BaseModel):
 
     notes: Optional[str] = None
     stage: Optional[ProspectStage] = None
+    admission_stage: Optional[AdmissionStage] = Field(
+        default=None, alias="admissionStage"
+    )
     assigned_to_id: Optional[int] = Field(
         default=None, alias="assignedToId"
     )
@@ -297,6 +312,15 @@ class ProspectUpdate(BaseModel):
             return int(value)
         return value
 
+    @field_validator("admission_stage", mode="before")
+    @classmethod
+    def coerce_admission_stage(cls, value: Any) -> Any:
+        if value is None or value == "":
+            return None
+        from app.services.admission_stage_service import parse_admission_stage
+
+        return parse_admission_stage(value)
+
 
 # --------------------------------------------------
 # Response
@@ -320,6 +344,10 @@ class ProspectResponse(BaseModel):
     )
     dob: Optional[date] = None
     stage: ProspectStage
+    admission_stage: AdmissionStage = Field(
+        default=AdmissionStage.registered,
+        serialization_alias="admissionStage",
+    )
 
     estimated_deal_value: Decimal = Field(
         serialization_alias="estimatedValue"

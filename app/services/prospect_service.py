@@ -10,7 +10,7 @@ from app.core.file_storage import FileStorage
 from app.core.id_generator import generate_id, generate_next_code
 from app.core.security import hash_password
 from app.db.models.payment import Payment, PaymentMethod, PaymentStatus
-from app.db.models.prospect import Prospect, ProspectStage
+from app.db.models.prospect import AdmissionStage, Prospect, ProspectStage
 from app.db.models.prospect_document import DocumentType, ProspectDocument
 from app.db.models.user import User, UserRole
 from app.repositories.prospect_repository import ProspectRepository
@@ -19,6 +19,10 @@ from app.schemas.prospect import (
     LeadPaymentInput,
     ProspectCreate,
     ProspectUpdate,
+)
+from app.services.admission_stage_service import (
+    apply_admission_stage_autos,
+    parse_admission_stage,
 )
 from app.services.notification_service import ActivityLogService, NotificationService
 
@@ -335,6 +339,9 @@ class ProspectService:
             source=payload.source,
             follow_up_date=payload.follow_up_date,
             stage=payload.stage or ProspectStage.new,
+            admission_stage=(
+                payload.admission_stage or AdmissionStage.registered
+            ),
             created_by_id=actor_id,
             updated_by_id=actor_id,
         )
@@ -360,6 +367,11 @@ class ProspectService:
                 payload.documents or [],
                 document_files or {},
             )
+            created = ProspectRepository.update(db, created)
+
+        # Auto admission stage from create-time payments
+        created = ProspectRepository.get_by_id(db, created.id)
+        if created and apply_admission_stage_autos(created):
             created = ProspectRepository.update(db, created)
 
         ActivityLogService.log(
@@ -395,15 +407,21 @@ class ProspectService:
         page_size: int,
         search: str | None,
         stage: str | None,
+        admission_stage: str | None = None,
         assigned_to_id: int | None = None,
         course_id: int | None = None,
     ):
+        parsed_admission = None
+        if admission_stage:
+            parsed_admission = parse_admission_stage(admission_stage).value
+
         items, total = ProspectRepository.list(
             db,
             page,
             page_size,
             search,
             stage,
+            admission_stage=parsed_admission,
             assigned_to_id=assigned_to_id,
             course_id=course_id,
         )
@@ -473,6 +491,7 @@ class ProspectService:
                 document_files or {},
             )
 
+        apply_admission_stage_autos(prospect)
         updated = ProspectRepository.update(db, prospect)
 
         ActivityLogService.log(
@@ -641,6 +660,58 @@ class ProspectService:
         return ProspectService._after_change_sync(db, updated.id, actor_id)
 
     @staticmethod
+    def change_admission_stage(
+        db: Session,
+        prospect_id: int,
+        admission_stage: Any,
+        actor_id: Optional[int] = None,
+    ):
+        prospect = ProspectRepository.get_by_id(db, prospect_id)
+        if not prospect:
+            raise ValueError("Prospect not found.")
+
+        try:
+            stage = parse_admission_stage(admission_stage)
+        except ValueError as exc:
+            raise ValueError(f"Invalid admission stage: {admission_stage}") from exc
+
+        prospect.admission_stage = stage
+        if actor_id is not None:
+            prospect.updated_by_id = actor_id
+        ProspectRepository.update(db, prospect)
+
+        ActivityLogService.log(
+            db,
+            action="admission_stage_changed",
+            entity_type="prospect",
+            entity_id=prospect.id,
+            description=(
+                f"Admission stage set to {stage.value} "
+                f"for {prospect.prospect_id}"
+            ),
+            user_id=actor_id,
+            prospect_id=prospect.id,
+        )
+
+        return ProspectService._after_change_sync(db, prospect_id, actor_id)
+
+    @staticmethod
+    def refresh_admission_stage(
+        db: Session,
+        prospect_id: int,
+        actor_id: Optional[int] = None,
+    ):
+        """Re-apply payment/exam auto rules after payment changes."""
+        prospect = ProspectRepository.get_by_id(db, prospect_id)
+        if not prospect:
+            return None
+        if apply_admission_stage_autos(prospect):
+            if actor_id is not None:
+                prospect.updated_by_id = actor_id
+            ProspectRepository.update(db, prospect)
+        return ProspectRepository.get_by_id(db, prospect_id)
+
+    @staticmethod
     def update_exam(
         db: Session,
         prospect_id: int,
@@ -658,5 +729,6 @@ class ProspectService:
             prospect.exam_certified = certified
         if actor_id is not None:
             prospect.updated_by_id = actor_id
+        apply_admission_stage_autos(prospect)
         ProspectRepository.update(db, prospect)
         return ProspectService._after_change_sync(db, prospect_id, actor_id)

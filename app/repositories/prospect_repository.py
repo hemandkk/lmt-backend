@@ -60,6 +60,7 @@ class ProspectRepository:
         page_size: int,
         search: str | None = None,
         stage: str | None = None,
+        admission_stage: str | None = None,
         assigned_to_id: int | None = None,
         course_id: int | None = None,
     ):
@@ -67,6 +68,7 @@ class ProspectRepository:
             db,
             search=search,
             stage=stage,
+            admission_stage=admission_stage,
             assigned_to_id=assigned_to_id,
             course_id=course_id,
         )
@@ -85,6 +87,7 @@ class ProspectRepository:
         db: Session,
         search: str | None = None,
         stage: str | None = None,
+        admission_stage: str | None = None,
         assigned_to_id: int | None = None,
         course_id: int | None = None,
     ) -> List[Prospect]:
@@ -93,6 +96,7 @@ class ProspectRepository:
                 db,
                 search=search,
                 stage=stage,
+                admission_stage=admission_stage,
                 assigned_to_id=assigned_to_id,
                 course_id=course_id,
             )
@@ -105,6 +109,7 @@ class ProspectRepository:
         db: Session,
         search: str | None = None,
         stage: str | None = None,
+        admission_stage: str | None = None,
         assigned_to_id: int | None = None,
         course_id: int | None = None,
     ):
@@ -129,6 +134,9 @@ class ProspectRepository:
 
         if stage:
             query = query.filter(Prospect.stage == stage)
+
+        if admission_stage:
+            query = query.filter(Prospect.admission_stage == admission_stage)
 
         return query
 

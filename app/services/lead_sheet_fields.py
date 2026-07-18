@@ -12,6 +12,22 @@ from app.db.models.activity_log import ActivityLog
 from app.db.models.payment import PaymentStatus
 from app.db.models.prospect import Prospect
 
+ADMISSION_STAGE_LABELS = {
+    "registered": "Registered",
+    "fifty_percent_paid": "50 % paid",
+    "exam_attended": "Exam Attended",
+    "waiting_for_100_percent_payment": "Waiting for 100% payment",
+    "certificate_waiting": "Certificate waiting",
+}
+
+
+def _admission_stage_label(prospect: Prospect) -> str:
+    raw = getattr(prospect, "admission_stage", None)
+    value = raw.value if hasattr(raw, "value") else str(raw or "")
+    if not value:
+        return ""
+    return ADMISSION_STAGE_LABELS.get(value, value)
+
 
 def _user_label(user) -> str:
     if user is None:
@@ -101,6 +117,7 @@ def build_lead_sync_fields(
         "follow_up_date": _fmt(follow_up),
         "next_follow_up": next_follow_up,
         "current_lead_stage": stage,
+        "admission_stage": _admission_stage_label(prospect),
         "last_activity": last_activity,
         "last_updated_by": _user_label(updated_by),
         "university": _fmt(prospect.university),
@@ -124,6 +141,7 @@ EXTRA_SYNC_HEADERS = [
     "Follow-up Date",
     "Next Follow-up",
     "Current Lead Stage",
+    "Admission Stage",
     "Last Activity",
     "Last Updated By",
     "University",
@@ -148,6 +166,7 @@ def extra_sync_values(fields: dict[str, str]) -> list[str]:
         fields.get("follow_up_date", ""),
         fields.get("next_follow_up", ""),
         fields.get("current_lead_stage", ""),
+        fields.get("admission_stage", ""),
         fields.get("last_activity", ""),
         fields.get("last_updated_by", ""),
         fields.get("university", ""),
