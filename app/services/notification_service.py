@@ -1,3 +1,4 @@
+import json
 from typing import Optional
 
 from sqlalchemy.orm import Session
@@ -180,7 +181,14 @@ class ActivityLogService:
         user_id: Optional[int] = None,
         prospect_id: Optional[int] = None,
         meta_data: Optional[str] = None,
+        detail: Optional[dict] = None,
     ) -> ActivityLog:
+        payload = meta_data
+        if detail is not None:
+            try:
+                payload = json.dumps(detail)
+            except (TypeError, ValueError):
+                payload = str(detail)
         log = ActivityLog(
             user_id=user_id,
             prospect_id=prospect_id,
@@ -188,7 +196,7 @@ class ActivityLogService:
             entity_type=entity_type,
             entity_id=entity_id,
             description=description,
-            meta_data=meta_data,
+            meta_data=payload,
         )
         return ActivityLogRepository.create(db, log)
 
@@ -216,6 +224,20 @@ class ActivityLogService:
 
         response_items = []
         for item in items:
+            detail: Optional[dict] = None
+            if item.meta_data:
+                try:
+                    parsed = json.loads(item.meta_data)
+                    if isinstance(parsed, dict):
+                        detail = parsed
+                except (TypeError, ValueError, json.JSONDecodeError):
+                    detail = {"raw": item.meta_data}
+
+            user_role = None
+            if item.user is not None and getattr(item.user, "role", None):
+                role = item.user.role
+                user_role = role.value if hasattr(role, "value") else str(role)
+
             response_items.append(
                 {
                     "id": item.id,
@@ -226,8 +248,11 @@ class ActivityLogService:
                     "entity_id": item.entity_id,
                     "description": item.description,
                     "meta_data": item.meta_data,
+                    "detail": detail,
                     "created_at": item.created_at,
                     "user_name": item.user.name if item.user else None,
+                    "user_type": user_role,
+                    "ip_address": None,
                 }
             )
 

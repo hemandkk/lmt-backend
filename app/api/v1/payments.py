@@ -20,8 +20,10 @@ from app.db.models.user import User
 from app.db.session import get_db
 from app.dependencies.auth import get_current_user
 from app.dependencies.permissions import (
+    deny_if_cannot_mutate_leads,
     ensure_payment_access,
     ensure_prospect_access,
+    require_payment_verifier,
     resolve_employee_scope,
 )
 from app.schemas.payment import (
@@ -30,6 +32,7 @@ from app.schemas.payment import (
     PaymentResponse,
     PaymentSummaryResponse,
     PaymentUpdate,
+    PaymentVerificationUpdate,
     ReceiptUploadResponse,
 )
 from app.services.payment_service import PaymentService
@@ -62,6 +65,7 @@ async def create_payment(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
+    deny_if_cannot_mutate_leads(current_user)
     content_type = (request.headers.get("content-type") or "").lower()
     receipt_file: UploadFile | None = None
 
@@ -133,13 +137,20 @@ def list_payments(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
+    from app.core.roles import visible_admission_stages_for_role
+
     scoped_employee_id = resolve_employee_scope(current_user, employee_id)
+    forced = visible_admission_stages_for_role(current_user)
+    admission_stages = (
+        [s.value for s in forced] if forced is not None else None
+    )
     service = PaymentService(db)
     total, items = service.list_payments(
         skip=skip,
         limit=limit,
         assigned_to_id=scoped_employee_id,
         prospect_id=prospect_id,
+        admission_stages=admission_stages,
     )
     return {"total": total, "items": items}
 
@@ -191,6 +202,31 @@ def get_payment(
     return payment
 
 
+@router.patch(
+    "/{payment_id}/verification",
+    response_model=PaymentResponse,
+)
+def verify_payment(
+    payment_id: int,
+    payload: PaymentVerificationUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_payment_verifier),
+):
+    """Admin / accountant: set payment verification status."""
+    existing = PaymentService(db).get_payment(payment_id)
+    if not existing:
+        raise HTTPException(status_code=404, detail="Payment not found.")
+    ensure_payment_access(db, existing, current_user)
+    try:
+        return PaymentService(db).verify_payment(
+            payment_id,
+            payload.verification_status,
+            actor_id=current_user.id,
+        )
+    except ValueError as ex:
+        raise HTTPException(status_code=400, detail=str(ex)) from ex
+
+
 @router.put("/{payment_id}", response_model=PaymentResponse)
 def update_payment(
     payment_id: int,
@@ -198,6 +234,7 @@ def update_payment(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
+    deny_if_cannot_mutate_leads(current_user)
     existing = PaymentService(db).get_payment(payment_id)
     if not existing:
         raise HTTPException(status_code=404, detail="Payment not found.")
@@ -214,6 +251,7 @@ def delete_payment(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
+    deny_if_cannot_mutate_leads(current_user)
     existing = PaymentService(db).get_payment(payment_id)
     if not existing:
         raise HTTPException(status_code=404, detail="Payment not found.")
@@ -234,6 +272,7 @@ def upload_receipt(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
+    deny_if_cannot_mutate_leads(current_user)
     existing = PaymentService(db).get_payment(payment_id)
     if not existing:
         raise HTTPException(status_code=404, detail="Payment not found.")

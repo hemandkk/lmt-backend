@@ -2,14 +2,21 @@ from __future__ import annotations
 
 from datetime import date, datetime
 from decimal import Decimal
-from typing import Optional
+from typing import Any, Optional
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    field_validator,
+    model_validator,
+)
 
 from app.db.models.payment import (
     PaymentMethod,
     PaymentStatus,
     PaymentType,
+    PaymentVerificationStatus,
 )
 
 
@@ -130,6 +137,38 @@ class ReceiptUploadResponse(BaseModel):
     receipt_url: str = Field(..., alias="receiptUrl")
 
 
+class PaymentVerificationUpdate(BaseModel):
+    model_config = _alias_config()
+
+    verification_status: PaymentVerificationStatus = Field(
+        ...,
+        alias="verificationStatus",
+    )
+
+    @field_validator("verification_status", mode="before")
+    @classmethod
+    def coerce_verification_status(cls, value: Any):
+        if isinstance(value, PaymentVerificationStatus):
+            return value
+        if value is None:
+            raise ValueError("verificationStatus is required")
+        raw = str(value).strip()
+        snake = raw.replace("-", "_").replace(" ", "_").lower()
+        compact = snake.replace("_", "")
+        aliases = {
+            "verified": PaymentVerificationStatus.verified,
+            "not_verified": PaymentVerificationStatus.not_verified,
+            "notverified": PaymentVerificationStatus.not_verified,
+            "not_credited": PaymentVerificationStatus.not_credited,
+            "notcredited": PaymentVerificationStatus.not_credited,
+        }
+        if snake in aliases:
+            return aliases[snake]
+        if compact in aliases:
+            return aliases[compact]
+        return PaymentVerificationStatus(snake)
+
+
 # -----------------------------
 # Response
 # -----------------------------
@@ -140,11 +179,59 @@ class PaymentResponse(PaymentBase):
 
     receipt_url: Optional[str] = Field(default=None, alias="receiptUrl")
 
+    verification_status: PaymentVerificationStatus = Field(
+        default=PaymentVerificationStatus.not_verified,
+        alias="verificationStatus",
+        serialization_alias="verificationStatus",
+    )
+    verified_at: Optional[datetime] = Field(
+        default=None,
+        alias="verifiedAt",
+        serialization_alias="verifiedAt",
+    )
+    verified_by_id: Optional[int] = Field(
+        default=None,
+        alias="verifiedById",
+        serialization_alias="verifiedById",
+    )
+    verified_by_name: Optional[str] = Field(
+        default=None,
+        alias="verifiedByName",
+        serialization_alias="verifiedByName",
+    )
+
     created_by: Optional[int] = Field(default=None, alias="createdBy")
 
     created_at: datetime = Field(..., alias="createdAt")
 
     updated_at: datetime = Field(..., alias="updatedAt")
+
+    @model_validator(mode="wrap")
+    @classmethod
+    def pull_verifier_fields(cls, data: Any, handler):
+        verifier_name = None
+        if not isinstance(data, dict):
+            verifier = getattr(data, "verified_by", None)
+            if verifier is not None:
+                verifier_name = verifier.name or verifier.email
+        else:
+            verifier_name = data.get("verified_by_name") or data.get(
+                "verifiedByName"
+            )
+
+        result = handler(data)
+        if verifier_name is not None:
+            result.verified_by_name = verifier_name
+        if result.verification_status is None:
+            result.verification_status = PaymentVerificationStatus.not_verified
+        return result
+
+    @field_validator("verification_status", mode="before")
+    @classmethod
+    def default_verification(cls, value: Any):
+        if value is None or value == "":
+            return PaymentVerificationStatus.not_verified
+        return value
 
 
 # -----------------------------

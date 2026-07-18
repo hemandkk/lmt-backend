@@ -21,6 +21,8 @@ from app.db.mixins import TimestampMixin
 class UserRole(str, enum.Enum):
     admin = "admin"
     employee = "employee"
+    accountant = "accountant"
+    processing_team = "processing_team"
 
 class User(TimestampMixin, Base):
     __tablename__ = "users"

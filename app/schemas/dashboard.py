@@ -455,8 +455,11 @@ class ActivityLogResponse(BaseModel):
     entity_id: Optional[int] = Field(default=None, serialization_alias="entityId")
     description: str
     meta_data: Optional[str] = Field(default=None, serialization_alias="metaData")
+    detail: Optional[dict] = None
     created_at: datetime = Field(serialization_alias="createdAt")
     user_name: Optional[str] = Field(default=None, serialization_alias="userName")
+    user_type: Optional[str] = Field(default=None, serialization_alias="userType")
+    ip_address: Optional[str] = Field(default=None, serialization_alias="ipAddress")
 
     model_config = _alias_config()
 

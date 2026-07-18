@@ -3,6 +3,7 @@ from decimal import Decimal
 from sqlalchemy import func, or_
 from sqlalchemy.orm import Session
 
+from app.core.roles import ASSIGNABLE_ROLES, SALES_ROLES, normalize_role
 from app.core.security import hash_password
 from app.db.models.prospect import Prospect
 from app.db.models.user import User, UserRole
@@ -15,26 +16,38 @@ from app.schemas.employee import (
     EmployeeUpdate,
 )
 from app.services.master_service import resolve_employee_monthly_target
+from app.services.notification_service import ActivityLogService
 
 
 class EmployeeService:
 
     @staticmethod
+    def _staff_roles():
+        return list(ASSIGNABLE_ROLES)
+
+    @staticmethod
     def _to_response(db: Session, user: User) -> EmployeeResponse:
         effective, assigned, source = resolve_employee_monthly_target(db, user)
-        leads_assigned = (
-            db.query(func.count(Prospect.id))
-            .filter(Prospect.assigned_to_id == user.id)
-            .scalar()
-            or 0
-        )
-        revenue = AnalyticsRepository.payment_collected(
-            db, employee_id=user.id
-        )
+        leads_assigned = 0
+        revenue = Decimal("0")
+        # Performance metrics only meaningful for sales employees
+        if user.role == UserRole.employee:
+            leads_assigned = (
+                db.query(func.count(Prospect.id))
+                .filter(Prospect.assigned_to_id == user.id)
+                .scalar()
+                or 0
+            )
+            revenue = Decimal(
+                str(AnalyticsRepository.payment_collected(db, employee_id=user.id) or 0)
+            )
         assigned_target = (
             Decimal(str(user.monthly_sales_target))
             if user.monthly_sales_target is not None
             else None
+        )
+        role_value = (
+            user.role.value if hasattr(user.role, "value") else str(user.role)
         )
         return EmployeeResponse(
             id=user.id,
@@ -44,7 +57,8 @@ class EmployeeService:
             department=getattr(user, "department", None),
             designation=getattr(user, "designation", None),
             employee_code=user.employee_id,
-            role=user.role.value if hasattr(user.role, "value") else str(user.role),
+            role=role_value,
+            status="active" if user.is_active else "inactive",
             is_active=bool(user.is_active),
             monthly_target=assigned_target,
             assigned_target=assigned_target,
@@ -52,7 +66,7 @@ class EmployeeService:
             target_assigned=assigned,
             target_source=source,
             leads_assigned=int(leads_assigned),
-            revenue=Decimal(str(revenue or 0)),
+            revenue=revenue,
             last_login=user.last_login,
             created_at=getattr(user, "created_at", None),
             updated_at=getattr(user, "updated_at", None),
@@ -65,8 +79,19 @@ class EmployeeService:
         page_size: int = 20,
         search: str | None = None,
         is_active: bool | None = None,
+        role: str | None = None,
+        sales_only: bool = False,
     ) -> EmployeeListResponse:
-        query = db.query(User).filter(User.role == UserRole.employee)
+        if sales_only:
+            roles = list(SALES_ROLES)
+        elif role:
+            roles = [normalize_role(role)]
+            if roles[0] not in ASSIGNABLE_ROLES:
+                roles = EmployeeService._staff_roles()
+        else:
+            roles = EmployeeService._staff_roles()
+
+        query = db.query(User).filter(User.role.in_(roles))
 
         if is_active is not None:
             query = query.filter(User.is_active.is_(is_active))
@@ -97,14 +122,24 @@ class EmployeeService:
     @staticmethod
     def get(db: Session, employee_id: int) -> EmployeeResponse:
         user = UserRepository.get_by_id(db, employee_id)
-        if not user or user.role != UserRole.employee:
+        if not user or user.role not in ASSIGNABLE_ROLES:
             raise ValueError("Employee not found.")
         return EmployeeService._to_response(db, user)
 
     @staticmethod
-    def create(db: Session, payload: EmployeeCreate) -> EmployeeResponse:
+    def create(
+        db: Session,
+        payload: EmployeeCreate,
+        actor_id: int | None = None,
+    ) -> EmployeeResponse:
         if UserRepository.get_by_email(db, payload.email):
             raise ValueError("Email already exists.")
+
+        role = normalize_role(payload.role or UserRole.employee)
+        if role not in ASSIGNABLE_ROLES:
+            raise ValueError(
+                "role must be employee, accountant, or processing_team."
+            )
 
         code = payload.employee_code
         if code and UserRepository.get_by_employee_id(db, code):
@@ -113,7 +148,7 @@ class EmployeeService:
         if not code:
             count = (
                 db.query(func.count(User.id))
-                .filter(User.role == UserRole.employee)
+                .filter(User.role.in_(list(ASSIGNABLE_ROLES)))
                 .scalar()
                 or 0
             )
@@ -121,6 +156,11 @@ class EmployeeService:
             while UserRepository.get_by_employee_id(db, code):
                 count += 1
                 code = f"EMP{count + 1:04d}"
+
+        # Targets only apply to sales employees
+        monthly_target = (
+            payload.monthly_target if role in SALES_ROLES else None
+        )
 
         user = User(
             name=payload.name,
@@ -130,13 +170,32 @@ class EmployeeService:
             department=(payload.department or None),
             designation=(payload.designation or None),
             password_hash=hash_password(payload.password),
-            role=UserRole.employee,
+            role=role,
             is_active=payload.is_active,
-            monthly_sales_target=payload.monthly_target,
+            monthly_sales_target=monthly_target,
         )
         db.add(user)
         db.commit()
         db.refresh(user)
+
+        ActivityLogService.log(
+            db,
+            action="user_create",
+            entity_type="user",
+            entity_id=user.id,
+            description=(
+                f"User {user.employee_id} ({user.name}) created "
+                f"with role {role.value}"
+            ),
+            user_id=actor_id,
+            detail={
+                "employeeId": user.employee_id,
+                "name": user.name,
+                "role": role.value,
+                "email": user.email,
+            },
+        )
+
         return EmployeeService._to_response(db, user)
 
     @staticmethod
@@ -146,7 +205,7 @@ class EmployeeService:
         payload: EmployeeUpdate,
     ) -> EmployeeResponse:
         user = UserRepository.get_by_id(db, employee_id)
-        if not user or user.role != UserRole.employee:
+        if not user or user.role not in ASSIGNABLE_ROLES:
             raise ValueError("Employee not found.")
 
         data = payload.model_dump(exclude_unset=True)
@@ -183,10 +242,21 @@ class EmployeeService:
         if "is_active" in data and data["is_active"] is not None:
             user.is_active = data["is_active"]
 
+        if "role" in data and data["role"] is not None:
+            role = normalize_role(data["role"])
+            if role not in ASSIGNABLE_ROLES:
+                raise ValueError(
+                    "role must be employee, accountant, or processing_team."
+                )
+            user.role = role
+            if role not in SALES_ROLES:
+                user.monthly_sales_target = None
+
         if data.get("clear_monthly_target"):
             user.monthly_sales_target = None
         elif "monthly_target" in data and data["monthly_target"] is not None:
-            user.monthly_sales_target = data["monthly_target"]
+            if user.role in SALES_ROLES:
+                user.monthly_sales_target = data["monthly_target"]
 
         db.commit()
         db.refresh(user)
@@ -195,7 +265,7 @@ class EmployeeService:
     @staticmethod
     def deactivate(db: Session, employee_id: int) -> None:
         user = UserRepository.get_by_id(db, employee_id)
-        if not user or user.role != UserRole.employee:
+        if not user or user.role not in ASSIGNABLE_ROLES:
             raise ValueError("Employee not found.")
         user.is_active = False
         db.commit()

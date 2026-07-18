@@ -1,9 +1,9 @@
 from datetime import datetime
 from decimal import Decimal
 from math import ceil
-from typing import Optional
+from typing import Any, Optional
 
-from pydantic import BaseModel, ConfigDict, EmailStr, Field
+from pydantic import BaseModel, ConfigDict, EmailStr, Field, field_validator
 
 
 def _alias_config() -> ConfigDict:
@@ -27,6 +27,16 @@ class EmployeeCreate(BaseModel):
         default=None, gt=0, alias="monthlyTarget"
     )
     is_active: bool = Field(default=True, alias="isActive")
+    role: Optional[str] = Field(default="employee")
+
+    @field_validator("role", mode="before")
+    @classmethod
+    def coerce_role(cls, value: Any) -> Any:
+        if value is None or value == "":
+            return "employee"
+        from app.core.roles import normalize_role
+
+        return normalize_role(value).value
 
 
 class EmployeeUpdate(BaseModel):
@@ -48,6 +58,16 @@ class EmployeeUpdate(BaseModel):
         description="If true, clear assigned target (use master default).",
     )
     is_active: Optional[bool] = Field(default=None, alias="isActive")
+    role: Optional[str] = None
+
+    @field_validator("role", mode="before")
+    @classmethod
+    def coerce_role(cls, value: Any) -> Any:
+        if value is None or value == "":
+            return None
+        from app.core.roles import normalize_role
+
+        return normalize_role(value).value
 
 
 class EmployeeResponse(BaseModel):
@@ -63,6 +83,7 @@ class EmployeeResponse(BaseModel):
         default=None, serialization_alias="employeeId"
     )
     role: str
+    status: str = "active"
     is_active: bool = Field(serialization_alias="isActive")
     # Frontend edit form uses monthlyTarget (assigned override; null = master default)
     monthly_target: Optional[Decimal] = Field(

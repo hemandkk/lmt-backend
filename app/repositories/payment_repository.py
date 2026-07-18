@@ -21,7 +21,10 @@ class PaymentRepository:
     def get_by_id(self, payment_id: int) -> Payment | None:
         return (
             self.db.query(Payment)
-            .options(joinedload(Payment.prospect))
+            .options(
+                joinedload(Payment.prospect),
+                joinedload(Payment.verified_by),
+            )
             .filter(Payment.id == payment_id)
             .first()
         )
@@ -36,6 +39,7 @@ class PaymentRepository:
     def get_by_prospect(self, prospect_id: int) -> list[Payment]:
         return (
             self.db.query(Payment)
+            .options(joinedload(Payment.verified_by))
             .filter(Payment.prospect_id == prospect_id)
             .order_by(Payment.payment_date.desc())
             .all()
@@ -47,9 +51,12 @@ class PaymentRepository:
         limit: int = 20,
         assigned_to_id: int | None = None,
         prospect_id: int | None = None,
+        admission_stages: list[str] | None = None,
     ) -> tuple[int, list[Payment]]:
-        query = self.db.query(Payment).join(
-            Prospect, Prospect.id == Payment.prospect_id
+        query = (
+            self.db.query(Payment)
+            .options(joinedload(Payment.verified_by))
+            .join(Prospect, Prospect.id == Payment.prospect_id)
         )
 
         if assigned_to_id is not None:
@@ -57,6 +64,9 @@ class PaymentRepository:
 
         if prospect_id is not None:
             query = query.filter(Payment.prospect_id == prospect_id)
+
+        if admission_stages:
+            query = query.filter(Prospect.admission_stage.in_(admission_stages))
 
         total = query.count()
         items = (

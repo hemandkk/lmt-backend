@@ -27,7 +27,7 @@ def list_activity_logs(
 ):
     """
     Activity logs for lead assignment, stage changes, updates, etc.
-    Employees see only their own logs; admins can filter by user.
+    Admin: full log (optional user filter). Others: own logs only.
     """
     scoped_user_id = user_id
     if current_user.role != UserRole.admin:

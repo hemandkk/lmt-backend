@@ -20,6 +20,8 @@ ADMISSION_STAGE_LABELS = {
     "certificate_waiting": "Certificate waiting",
     "waiting_result": "Waiting result",
     "result_announced": "Result announced",
+    "completed": "Completed",
+    "delivered": "Delivered",
 }
 
 

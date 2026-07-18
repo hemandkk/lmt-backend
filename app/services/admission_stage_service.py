@@ -17,6 +17,8 @@ ADMISSION_STAGE_ORDER = [
     AdmissionStage.certificate_waiting,
     AdmissionStage.waiting_result,
     AdmissionStage.result_announced,
+    AdmissionStage.completed,
+    AdmissionStage.delivered,
 ]
 
 _ALIASES = {
@@ -43,6 +45,8 @@ _ALIASES = {
     "waitingresult": AdmissionStage.waiting_result,
     "result_announced": AdmissionStage.result_announced,
     "resultannounced": AdmissionStage.result_announced,
+    "completed": AdmissionStage.completed,
+    "delivered": AdmissionStage.delivered,
 }
 
 
@@ -78,6 +82,8 @@ def parse_admission_stage(value: Any) -> AdmissionStage:
         "certificate waiting": AdmissionStage.certificate_waiting,
         "waiting result": AdmissionStage.waiting_result,
         "result announced": AdmissionStage.result_announced,
+        "completed": AdmissionStage.completed,
+        "delivered": AdmissionStage.delivered,
     }
     if spaced in label_map:
         return label_map[spaced]

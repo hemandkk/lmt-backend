@@ -9,7 +9,12 @@ from sqlalchemy.orm import Session
 from app.core.file_storage import FileStorage
 from app.core.id_generator import generate_id, generate_next_code
 from app.core.security import hash_password
-from app.db.models.payment import Payment, PaymentMethod, PaymentStatus
+from app.db.models.payment import (
+    Payment,
+    PaymentMethod,
+    PaymentStatus,
+    PaymentVerificationStatus,
+)
 from app.db.models.prospect import AdmissionStage, Prospect, ProspectStage
 from app.db.models.prospect_document import DocumentType, ProspectDocument
 from app.db.models.user import User, UserRole
@@ -120,6 +125,7 @@ class ProspectService:
             receipt_url=receipt_url,
             transaction_number=payment_in.transaction_number,
             reference_number=payment_in.reference_number,
+            verification_status=PaymentVerificationStatus.not_verified,
         )
 
     @staticmethod
@@ -408,12 +414,17 @@ class ProspectService:
         search: str | None,
         stage: str | None,
         admission_stage: str | None = None,
+        admission_stages: list[str] | None = None,
         assigned_to_id: int | None = None,
         course_id: int | None = None,
     ):
-        parsed_admission = None
-        if admission_stage:
-            parsed_admission = parse_admission_stage(admission_stage).value
+        parsed_stages: list[str] | None = None
+        if admission_stages:
+            parsed_stages = [
+                parse_admission_stage(s).value for s in admission_stages
+            ]
+        elif admission_stage:
+            parsed_stages = [parse_admission_stage(admission_stage).value]
 
         items, total = ProspectRepository.list(
             db,
@@ -421,7 +432,7 @@ class ProspectService:
             page_size,
             search,
             stage,
-            admission_stage=parsed_admission,
+            admission_stages=parsed_stages,
             assigned_to_id=assigned_to_id,
             course_id=course_id,
         )
@@ -675,6 +686,12 @@ class ProspectService:
         except ValueError as exc:
             raise ValueError(f"Invalid admission stage: {admission_stage}") from exc
 
+        old_stage = (
+            prospect.admission_stage.value
+            if hasattr(prospect.admission_stage, "value")
+            else str(prospect.admission_stage or "")
+        )
+
         prospect.admission_stage = stage
         if actor_id is not None:
             prospect.updated_by_id = actor_id
@@ -682,15 +699,21 @@ class ProspectService:
 
         ActivityLogService.log(
             db,
-            action="admission_stage_changed",
+            action="admission_stage_change",
             entity_type="prospect",
             entity_id=prospect.id,
             description=(
-                f"Admission stage set to {stage.value} "
+                f"Admission stage {old_stage} → {stage.value} "
                 f"for {prospect.prospect_id}"
             ),
             user_id=actor_id,
             prospect_id=prospect.id,
+            detail={
+                "from": old_stage,
+                "to": stage.value,
+                "prospectId": prospect.prospect_id,
+                "prospectName": prospect.name,
+            },
         )
 
         return ProspectService._after_change_sync(db, prospect_id, actor_id)

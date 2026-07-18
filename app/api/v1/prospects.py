@@ -23,12 +23,24 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.id_generator import generate_next_code
+from app.core.roles import (
+    admission_stage_allowed_for_role,
+    can_change_admission_stage,
+    can_mutate_leads,
+    intersect_admission_filters,
+    is_employee,
+    prospect_visible_to_user,
+    visible_admission_stages_for_role,
+)
 from app.db.models.prospect import Prospect
 from app.db.models.prospect_document import DocumentType
 from app.db.models.user import User, UserRole
 from app.db.session import get_db
 from app.dependencies.auth import get_current_user, get_optional_user
-from app.dependencies.permissions import require_admin
+from app.dependencies.permissions import (
+    deny_if_cannot_mutate_leads,
+    require_admin,
+)
 from app.schemas.prospect import (
     ProspectCreate,
     ProspectListResponse,
@@ -39,6 +51,7 @@ from app.schemas.prospect import (
     TimelineItem,
 )
 from app.schemas.document import DocumentListResponse, DocumentResponse
+from app.services.admission_stage_service import parse_admission_stage
 from app.services.prospect_service import ProspectService
 from app.services.document_service import DocumentService
 from app.services.export_service import ExportService
@@ -328,20 +341,47 @@ def _parse_multipart_lead(form, model_cls):
 
 
 def _employee_scope_id(user: User) -> int | None:
-    """Employees only see their own leads; admins see all."""
-    if user.role == UserRole.employee:
+    """Sales employees only see their own leads."""
+    if is_employee(user):
         return user.id
     return None
 
 
 def _ensure_prospect_access(prospect, user: User) -> None:
-    if user.role == UserRole.admin:
+    if prospect_visible_to_user(prospect, user):
         return
-    if prospect.assigned_to_id != user.id:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="You do not have access to this prospect.",
-        )
+    raise HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail="You do not have access to this prospect.",
+    )
+
+
+def _parse_admission_stage_filters(
+    admission_stage: str | None,
+    admission_stages_csv: str | None,
+    current_user: User,
+) -> list[str] | None:
+    """
+    Resolve admissionStage / admissionStages query params with role force-filters.
+    Returns:
+      - None: no admission-stage filter
+      - []: empty result (requested stages outside role visibility)
+      - list[str]: IN filter values
+    """
+    requested = []
+    if admission_stages_csv:
+        for part in admission_stages_csv.split(","):
+            part = part.strip()
+            if part:
+                requested.append(parse_admission_stage(part))
+    elif admission_stage:
+        requested.append(parse_admission_stage(admission_stage))
+
+    forced = visible_admission_stages_for_role(current_user)
+    resolved = intersect_admission_filters(requested or None, forced)
+    if resolved is None:
+        return None
+    return [s.value for s in resolved]
 
 
 @router.get("/utility/next-prospect-id")
@@ -369,36 +409,38 @@ def list_prospects(
     search: str | None = None,
     stage: str | None = None,
     admission_stage: str | None = Query(None, alias="admissionStage"),
+    admission_stages: str | None = Query(None, alias="admissionStages"),
     course_id: int | None = Query(None, alias="courseId"),
     assigned_to_id: int | None = Query(None, alias="assignedToId"),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
     """
-    Admin: all prospects (optional assignedToId / courseId filter).
-    Employee: only prospects assigned to the logged-in user.
-
-    Filters:
-    - stage: CRM stage (new, won, …)
-    - admissionStage: admission funnel
-      (registered, fifty_percent_paid, exam_attended,
-       waiting_for_100_percent_payment, certificate_waiting)
+    Role-scoped lead list:
+    - admin: all (optional filters)
+    - employee: assigned leads only
+    - accountant: all leads in certificate_waiting (any assignee)
+    - processing_team: all leads in waiting_result / result_announced
     """
     scope_id = _employee_scope_id(current_user)
     if scope_id is not None:
-        # Employees cannot override scope
         assigned_to_id = scope_id
-    elif assigned_to_id is None:
-        assigned_to_id = None  # admin sees all
+
+    # Accountant / processing_team: stage-scoped across all employees
+    if visible_admission_stages_for_role(current_user) is not None:
+        assigned_to_id = None
 
     try:
+        stage_filter = _parse_admission_stage_filters(
+            admission_stage, admission_stages, current_user
+        )
         return ProspectService.list(
             db,
             page,
             page_size,
             search,
             stage,
-            admission_stage=admission_stage,
+            admission_stages=stage_filter,
             assigned_to_id=assigned_to_id,
             course_id=course_id,
         )
@@ -411,6 +453,7 @@ def export_prospects(
     search: str | None = None,
     stage: str | None = None,
     admission_stage: str | None = Query(None, alias="admissionStage"),
+    admission_stages: str | None = Query(None, alias="admissionStages"),
     course_id: int | None = Query(None, alias="courseId"),
     assigned_to_id: int | None = Query(None, alias="assignedToId"),
     db: Session = Depends(get_db),
@@ -418,21 +461,27 @@ def export_prospects(
 ):
     """
     Download filtered leads as Excel (.xlsx).
-
-    Same filters as list (stage, admissionStage, search, courseId, assignedToId).
-    Includes create/edit fields (password excluded) plus absolute
-    document and payment receipt URLs for verification.
+    Same role scoping and filters as list.
     """
+    if not can_mutate_leads(current_user) and current_user.role != UserRole.admin:
+        # accountant / processing may still export their scoped lists
+        pass
+
     scope_id = _employee_scope_id(current_user)
     if scope_id is not None:
         assigned_to_id = scope_id
+    if visible_admission_stages_for_role(current_user) is not None:
+        assigned_to_id = None
 
     try:
+        stage_filter = _parse_admission_stage_filters(
+            admission_stage, admission_stages, current_user
+        )
         return ExportService.export_prospects_xlsx(
             db,
             search=search,
             stage=stage,
-            admission_stage=admission_stage,
+            admission_stages=stage_filter,
             assigned_to_id=assigned_to_id,
             course_id=course_id,
         )
@@ -462,7 +511,7 @@ def get_prospect(
 async def create_prospect(
     request: Request,
     db: Session = Depends(get_db),
-    current_user: Optional[User] = Depends(get_optional_user),
+    current_user: User = Depends(get_current_user),
 ):
     """
     Create lead.
@@ -472,8 +521,9 @@ async def create_prospect(
         B) flat fields (name, email, courseId, ...) +
            documents[] files paired with docTypes[]
     """
+    deny_if_cannot_mutate_leads(current_user)
     content_type = (request.headers.get("content-type") or "").lower()
-    actor_id = current_user.id if current_user else None
+    actor_id = current_user.id
 
     try:
         if "multipart/form-data" in content_type:
@@ -525,6 +575,7 @@ async def update_prospect(
     """
     Edit lead. Supports same JSON / multipart formats as create.
     """
+    deny_if_cannot_mutate_leads(current_user)
     content_type = (request.headers.get("content-type") or "").lower()
     actor_id = current_user.id
 
@@ -620,6 +671,7 @@ async def upload_prospect_document(
     Listing more-action: upload a document via multipart.
     Accepts docType/documentType/document_type + file/document/documents.
     """
+    deny_if_cannot_mutate_leads(current_user)
     try:
         prospect = ProspectService.get(db, prospect_id)
         _ensure_prospect_access(prospect, current_user)
@@ -703,6 +755,7 @@ async def upload_lead_document(
     current_user: User = Depends(get_current_user),
 ):
     """List more-action / edit: upload or replace a single document type."""
+    deny_if_cannot_mutate_leads(current_user)
     try:
         prospect = ProspectService.get(db, prospect_id)
         _ensure_prospect_access(prospect, current_user)
@@ -966,6 +1019,7 @@ def delete_prospect(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
+    deny_if_cannot_mutate_leads(current_user)
     try:
         prospect = ProspectService.get(db, prospect_id)
         _ensure_prospect_access(prospect, current_user)
@@ -985,6 +1039,7 @@ def update_stage(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
+    deny_if_cannot_mutate_leads(current_user)
     try:
         prospect = ProspectService.get(db, prospect_id)
         _ensure_prospect_access(prospect, current_user)
@@ -1017,14 +1072,38 @@ def update_admission_stage(
     """
     Listing-page update for admission funnel stage.
     Does not change CRM `stage` (new/won/…).
+    Restricted stages (waiting_result, result_announced, completed, delivered)
+    require admin or processing_team. Accountant cannot change any stage.
     """
+    if not can_change_admission_stage(current_user):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You do not have permission to change admission stage.",
+        )
+    try:
+        target = parse_admission_stage(payload.admission_stage)
+    except ValueError as ex:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(ex),
+        ) from ex
+
+    if not admission_stage_allowed_for_role(current_user, target):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=(
+                f"Only admin or processing_team may set admission stage "
+                f"'{target.value}'."
+            ),
+        )
+
     try:
         prospect = ProspectService.get(db, prospect_id)
         _ensure_prospect_access(prospect, current_user)
         return ProspectService.change_admission_stage(
             db,
             prospect_id,
-            payload.admission_stage,
+            target,
             actor_id=current_user.id,
         )
     except ValueError as ex:
@@ -1072,6 +1151,7 @@ def update_exam(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
+    deny_if_cannot_mutate_leads(current_user)
     if payload.attended is None and payload.certified is None:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,

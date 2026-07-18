@@ -137,6 +137,57 @@ def ensure_schema_updates() -> None:
                     )
                 )
 
+            # Extend PostgreSQL userrole enum for accountant / processing_team
+            for role_value in ("accountant", "processing_team"):
+                try:
+                    conn.execute(
+                        text(
+                            f"ALTER TYPE userrole ADD VALUE IF NOT EXISTS "
+                            f"'{role_value}'"
+                        )
+                    )
+                except Exception:
+                    # Older PG without IF NOT EXISTS — ignore if already present
+                    try:
+                        conn.execute(
+                            text(f"ALTER TYPE userrole ADD VALUE '{role_value}'")
+                        )
+                    except Exception:
+                        pass
+
+        if "payments" in tables:
+            pay_cols = {col["name"] for col in inspector.get_columns("payments")}
+            if "verification_status" not in pay_cols:
+                conn.execute(
+                    text(
+                        "ALTER TABLE payments "
+                        "ADD COLUMN verification_status VARCHAR(30) "
+                        "NOT NULL DEFAULT 'not_verified'"
+                    )
+                )
+                conn.execute(
+                    text(
+                        "CREATE INDEX IF NOT EXISTS "
+                        "ix_payments_verification_status "
+                        "ON payments (verification_status)"
+                    )
+                )
+            if "verified_at" not in pay_cols:
+                conn.execute(
+                    text(
+                        "ALTER TABLE payments "
+                        "ADD COLUMN verified_at TIMESTAMPTZ"
+                    )
+                )
+            if "verified_by_id" not in pay_cols:
+                conn.execute(
+                    text(
+                        "ALTER TABLE payments "
+                        "ADD COLUMN verified_by_id INTEGER "
+                        "REFERENCES users(id)"
+                    )
+                )
+
         if "incentive_slabs" in tables:
             slab_cols = {
                 col["name"] for col in inspector.get_columns("incentive_slabs")

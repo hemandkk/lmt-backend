@@ -1,11 +1,18 @@
 from typing import Optional
 
 from fastapi import Depends, HTTPException, status
+from sqlalchemy.orm import Session
 
+from app.core.roles import (
+    can_mutate_leads,
+    can_verify_payments,
+    is_admin,
+    is_employee,
+    prospect_visible_to_user,
+)
 from app.db.models.user import User, UserRole
 from app.dependencies.auth import get_current_user
 from app.repositories.prospect_repository import ProspectRepository
-from sqlalchemy.orm import Session
 
 
 def require_admin(
@@ -30,6 +37,29 @@ def require_employee(
     return current_user
 
 
+def require_lead_mutator(
+    current_user: User = Depends(get_current_user),
+) -> User:
+    """Admin or sales employee — create/edit leads, CRM stage, exam, payments, docs."""
+    if not can_mutate_leads(current_user):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You do not have permission to modify leads.",
+        )
+    return current_user
+
+
+def require_payment_verifier(
+    current_user: User = Depends(get_current_user),
+) -> User:
+    if not can_verify_payments(current_user):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only admin or accountant may verify payments.",
+        )
+    return current_user
+
+
 def resolve_employee_scope(
     current_user: User,
     requested_employee_id: Optional[int] = None,
@@ -37,13 +67,17 @@ def resolve_employee_scope(
     """
     Resolve which employee_id to filter by.
 
-    - Employee: always forced to their own id (cannot view others).
+    - Sales employee: always forced to their own id.
     - Admin: None = all users; or requested_employee_id if provided.
+    - Accountant / processing_team: no assignee scope (admission filters apply).
     """
-    if current_user.role == UserRole.employee:
+    if is_employee(current_user):
         return current_user.id
 
-    return requested_employee_id
+    if is_admin(current_user):
+        return requested_employee_id
+
+    return None
 
 
 def ensure_prospect_access(
@@ -62,15 +96,13 @@ def ensure_prospect_access(
             detail="Prospect not found.",
         )
 
-    if current_user.role == UserRole.admin:
+    if prospect_visible_to_user(prospect, current_user):
         return prospect
 
-    if prospect.assigned_to_id != current_user.id:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="You do not have access to this prospect.",
-        )
-    return prospect
+    raise HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail="You do not have access to this prospect.",
+    )
 
 
 def ensure_payment_access(
@@ -79,19 +111,24 @@ def ensure_payment_access(
     current_user: User,
 ):
     """Ensure payment belongs to a prospect the user can access."""
-    if current_user.role == UserRole.admin:
-        return payment
-
     if not payment:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Payment not found.",
         )
 
-    prospect = ProspectRepository.get_by_id(db, payment.prospect_id)
-    if not prospect or prospect.assigned_to_id != current_user.id:
+    if is_admin(current_user):
+        return payment
+
+    # Accountant may access payments on leads they can see (certificate_waiting)
+    # via ensure_prospect_access.
+    ensure_prospect_access(db, payment.prospect_id, current_user)
+    return payment
+
+
+def deny_if_cannot_mutate_leads(current_user: User) -> None:
+    if not can_mutate_leads(current_user):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="You do not have access to this payment.",
+            detail="You do not have permission to modify leads.",
         )
-    return payment

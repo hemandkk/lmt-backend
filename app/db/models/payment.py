@@ -1,10 +1,10 @@
 from __future__ import annotations
 
 import enum
-from datetime import date
+from datetime import date, datetime
 from decimal import Decimal
 
-from sqlalchemy import Date, Enum, ForeignKey, Numeric, String, Text
+from sqlalchemy import Date, DateTime, Enum, ForeignKey, Numeric, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
@@ -29,6 +29,12 @@ class PaymentMethod(str, enum.Enum):
     card = "card"
     bank_transfer = "bank_transfer"
     cheque = "cheque"
+
+
+class PaymentVerificationStatus(str, enum.Enum):
+    verified = "verified"
+    not_verified = "not_verified"
+    not_credited = "not_credited"
 
 
 class Payment(TimestampMixin, Base):
@@ -97,6 +103,28 @@ class Payment(TimestampMixin, Base):
         nullable=True,
     )
 
+    verification_status: Mapped[PaymentVerificationStatus] = mapped_column(
+        Enum(
+            PaymentVerificationStatus,
+            values_callable=lambda obj: [e.value for e in obj],
+            native_enum=False,
+            length=30,
+        ),
+        default=PaymentVerificationStatus.not_verified,
+        nullable=False,
+        index=True,
+    )
+
+    verified_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
+
+    verified_by_id: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id"),
+        nullable=True,
+    )
+
     created_by: Mapped[int | None] = mapped_column(
         ForeignKey("users.id"),
         nullable=True,
@@ -110,4 +138,9 @@ class Payment(TimestampMixin, Base):
     creator = relationship(
         "User",
         foreign_keys=[created_by],
+    )
+
+    verified_by = relationship(
+        "User",
+        foreign_keys=[verified_by_id],
     )

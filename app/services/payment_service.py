@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import date
+from datetime import date, datetime, timezone
 from decimal import Decimal
 
 from fastapi import UploadFile
@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 
 from app.core.file_storage import FileStorage
 from app.core.id_generator import generate_id
-from app.db.models.payment import Payment
+from app.db.models.payment import Payment, PaymentVerificationStatus
 from app.repositories.analytics_repository import AnalyticsRepository
 from app.repositories.payment_repository import PaymentRepository
 from app.repositories.prospect_repository import ProspectRepository
@@ -21,6 +21,7 @@ from app.schemas.payment import (
     PaymentTypeBreakdown,
     PaymentUpdate,
 )
+from app.services.notification_service import ActivityLogService
 
 
 class PaymentService:
@@ -67,13 +68,36 @@ class PaymentService:
             reference_number=payment_in.reference_number,
             notes=payment_in.notes,
             receipt_url=receipt_url,
+            verification_status=PaymentVerificationStatus.not_verified,
             created_by=current_user_id,
         )
         created = self.payment_repo.create(payment)
+
+        ActivityLogService.log(
+            self.db,
+            action="payment_add",
+            entity_type="payment",
+            entity_id=created.id,
+            description=(
+                f"Payment {created.payment_id} added "
+                f"(₹{created.amount}) for prospect {prospect.prospect_id}"
+            ),
+            user_id=current_user_id,
+            prospect_id=prospect.id,
+            detail={
+                "paymentId": created.payment_id,
+                "prospectId": prospect.prospect_id,
+                "amount": float(created.amount),
+                "verificationStatus": (
+                    PaymentVerificationStatus.not_verified.value
+                ),
+            },
+        )
+
         self._after_payment_change(
             payment_in.prospect_id, current_user_id
         )
-        return created
+        return self.payment_repo.get_by_id(created.id) or created
 
     def _after_payment_change(
         self, prospect_id: int, actor_id: int | None = None
@@ -96,18 +120,77 @@ class PaymentService:
     def get_payment(self, payment_id: int) -> Payment | None:
         return self.payment_repo.get_by_id(payment_id)
 
+    def verify_payment(
+        self,
+        payment_id: int,
+        verification_status: PaymentVerificationStatus,
+        actor_id: int,
+    ) -> Payment:
+        payment = self.payment_repo.get_by_id(payment_id)
+        if not payment:
+            raise ValueError("Payment not found.")
+
+        old_status = (
+            payment.verification_status.value
+            if hasattr(payment.verification_status, "value")
+            else str(payment.verification_status or "not_verified")
+        )
+        new_status = verification_status.value
+
+        payment.verification_status = verification_status
+        if verification_status == PaymentVerificationStatus.verified:
+            payment.verified_at = datetime.now(timezone.utc)
+            payment.verified_by_id = actor_id
+        # Keep last verifier info when moving away from verified
+
+        self.db.add(payment)
+        self.db.commit()
+
+        prospect = ProspectRepository.get_by_id(self.db, payment.prospect_id)
+        ActivityLogService.log(
+            self.db,
+            action="payment_verification",
+            entity_type="payment",
+            entity_id=payment.id,
+            description=(
+                f"Payment {payment.payment_id} verification "
+                f"{old_status} → {new_status}"
+            ),
+            user_id=actor_id,
+            prospect_id=payment.prospect_id,
+            detail={
+                "paymentId": payment.payment_id,
+                "from": old_status,
+                "to": new_status,
+                "prospectId": (
+                    prospect.prospect_id if prospect else payment.prospect_id
+                ),
+                "amount": float(payment.amount or 0),
+            },
+        )
+
+        from app.services.google_sheets_service import GoogleSheetsService
+
+        GoogleSheetsService.sync_prospect_by_id(
+            self.db, payment.prospect_id, actor_id=actor_id
+        )
+
+        return self.payment_repo.get_by_id(payment_id) or payment
+
     def list_payments(
         self,
         skip: int = 0,
         limit: int = 20,
         assigned_to_id: int | None = None,
         prospect_id: int | None = None,
+        admission_stages: list[str] | None = None,
     ):
         return self.payment_repo.list(
             skip=skip,
             limit=limit,
             assigned_to_id=assigned_to_id,
             prospect_id=prospect_id,
+            admission_stages=admission_stages,
         )
 
     def get_payments_by_prospect(self, prospect_id: int):

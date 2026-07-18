@@ -1,8 +1,9 @@
-from typing import List, Optional
+from typing import List, Optional, Sequence
 
 from sqlalchemy import func
 from sqlalchemy.orm import Session, joinedload, selectinload
 
+from app.db.models.payment import Payment
 from app.db.models.prospect import Prospect
 
 
@@ -11,7 +12,7 @@ class ProspectRepository:
     @staticmethod
     def _with_relations():
         return (
-            selectinload(Prospect.payments),
+            selectinload(Prospect.payments).joinedload(Payment.verified_by),
             selectinload(Prospect.documents),
             joinedload(Prospect.assigned_to),
             joinedload(Prospect.created_by),
@@ -61,6 +62,7 @@ class ProspectRepository:
         search: str | None = None,
         stage: str | None = None,
         admission_stage: str | None = None,
+        admission_stages: Sequence[str] | None = None,
         assigned_to_id: int | None = None,
         course_id: int | None = None,
     ):
@@ -69,6 +71,7 @@ class ProspectRepository:
             search=search,
             stage=stage,
             admission_stage=admission_stage,
+            admission_stages=admission_stages,
             assigned_to_id=assigned_to_id,
             course_id=course_id,
         )
@@ -88,6 +91,7 @@ class ProspectRepository:
         search: str | None = None,
         stage: str | None = None,
         admission_stage: str | None = None,
+        admission_stages: Sequence[str] | None = None,
         assigned_to_id: int | None = None,
         course_id: int | None = None,
     ) -> List[Prospect]:
@@ -97,6 +101,7 @@ class ProspectRepository:
                 search=search,
                 stage=stage,
                 admission_stage=admission_stage,
+                admission_stages=admission_stages,
                 assigned_to_id=assigned_to_id,
                 course_id=course_id,
             )
@@ -110,6 +115,7 @@ class ProspectRepository:
         search: str | None = None,
         stage: str | None = None,
         admission_stage: str | None = None,
+        admission_stages: Sequence[str] | None = None,
         assigned_to_id: int | None = None,
         course_id: int | None = None,
     ):
@@ -135,8 +141,16 @@ class ProspectRepository:
         if stage:
             query = query.filter(Prospect.stage == stage)
 
-        if admission_stage:
-            query = query.filter(Prospect.admission_stage == admission_stage)
+        stages: list[str] = []
+        if admission_stages:
+            stages.extend([s for s in admission_stages if s])
+        elif admission_stage:
+            stages.append(admission_stage)
+
+        if len(stages) == 1:
+            query = query.filter(Prospect.admission_stage == stages[0])
+        elif len(stages) > 1:
+            query = query.filter(Prospect.admission_stage.in_(stages))
 
         return query
 

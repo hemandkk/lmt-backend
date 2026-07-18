@@ -50,10 +50,19 @@ def list_employees(
         alias="status",
         description="active | inactive | all (frontend alias for isActive)",
     ),
+    role: Optional[str] = Query(
+        None,
+        description="Filter by role: employee | accountant | processing_team",
+    ),
+    sales_only: bool = Query(
+        False,
+        alias="salesOnly",
+        description="If true, only sales employees (excludes accountant/processing).",
+    ),
     db: Session = Depends(get_db),
     current_user: User = Depends(require_admin),
 ):
-    """Admin: paginated employee directory."""
+    """Admin: paginated staff directory (employee / accountant / processing_team)."""
     resolved_active = is_active
     if status_filter is not None:
         key = status_filter.strip().lower()
@@ -75,6 +84,8 @@ def list_employees(
         page_size=page_size,
         search=search,
         is_active=resolved_active,
+        role=role,
+        sales_only=sales_only,
     )
 
 
@@ -101,7 +112,9 @@ def create_employee(
     current_user: User = Depends(require_admin),
 ):
     try:
-        return EmployeeService.create(db, payload)
+        return EmployeeService.create(
+            db, payload, actor_id=current_user.id
+        )
     except ValueError as ex:
         raise HTTPException(status_code=400, detail=str(ex)) from ex
 

@@ -30,6 +30,7 @@ from app.core.security import (
     decode_token,
 )
 
+from app.core.roles import role_value
 from app.dependencies.auth import get_current_user
 from app.db.models.user import User
 
@@ -37,6 +38,16 @@ router = APIRouter(
     prefix="/auth",
     tags=["Authentication"],
 )
+
+
+def _user_payload(user: User) -> dict:
+    return {
+        "id": user.id,
+        "name": user.name,
+        "email": user.email,
+        "employee_id": user.employee_id,
+        "role": role_value(user),
+    }
 
 
 @router.post("/login")
@@ -63,21 +74,20 @@ def login(
     refresh_token = create_refresh_token(
         {
             "sub": str(user.id),
-            "role": user.role.value,
+            "role": role_value(user),
         }
     )
     return {
         "access_token": access_token,
         "refresh_token": refresh_token,
         "token_type": "bearer",
-        "user": {
-            "id": user.id,
-            "name": user.name,
-            "email": user.email,
-            "employee_id": user.employee_id,
-            "role": user.role.value,
-        },
+        "user": _user_payload(user),
     }
+
+
+@router.get("/me")
+def me(current_user: User = Depends(get_current_user)):
+    return {"user": _user_payload(current_user)}
 
 
 @router.post("/refresh")

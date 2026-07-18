@@ -43,6 +43,8 @@ class AdmissionStage(str, enum.Enum):
     certificate_waiting = "certificate_waiting"
     waiting_result = "waiting_result"
     result_announced = "result_announced"
+    completed = "completed"
+    delivered = "delivered"
 
 
 class Prospect(TimestampMixin, Base):

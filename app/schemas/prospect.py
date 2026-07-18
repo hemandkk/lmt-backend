@@ -13,7 +13,12 @@ from pydantic import (
     model_validator,
 )
 
-from app.db.models.payment import PaymentMethod, PaymentStatus, PaymentType
+from app.db.models.payment import (
+    PaymentMethod,
+    PaymentStatus,
+    PaymentType,
+    PaymentVerificationStatus,
+)
 from app.db.models.prospect import AdmissionStage, ProspectStage
 from app.db.models.prospect_document import DocumentType
 
@@ -70,6 +75,9 @@ class PaymentResponse(BaseModel):
 
     id: int
     payment_id: str = Field(serialization_alias="paymentId")
+    prospect_id: Optional[int] = Field(
+        default=None, serialization_alias="prospectId"
+    )
     amount: Decimal
     payment_type: PaymentType = Field(serialization_alias="paymentType")
     payment_method: Optional[PaymentMethod] = Field(
@@ -89,6 +97,31 @@ class PaymentResponse(BaseModel):
     reference_number: Optional[str] = Field(
         default=None, serialization_alias="referenceNumber"
     )
+    verification_status: PaymentVerificationStatus = Field(
+        default=PaymentVerificationStatus.not_verified,
+        serialization_alias="verificationStatus",
+    )
+    verified_at: Optional[datetime] = Field(
+        default=None, serialization_alias="verifiedAt"
+    )
+    verified_by_name: Optional[str] = Field(
+        default=None, serialization_alias="verifiedByName"
+    )
+
+    @model_validator(mode="wrap")
+    @classmethod
+    def pull_verifier_name(cls, data: Any, handler):
+        name = None
+        if not isinstance(data, dict):
+            verifier = getattr(data, "verified_by", None)
+            if verifier is not None:
+                name = verifier.name or verifier.email
+        result = handler(data)
+        if name is not None:
+            result.verified_by_name = name
+        if result.verification_status is None:
+            result.verification_status = PaymentVerificationStatus.not_verified
+        return result
 
 
 class ProspectPaymentListResponse(BaseModel):
@@ -459,6 +492,24 @@ class ProspectResponse(BaseModel):
             return 0.0
         pct = (self.total_paid / estimated) * Decimal("100")
         return float(round(pct, 2))
+
+    @computed_field(alias="paymentsVerified")
+    @property
+    def payments_verified(self) -> bool:
+        """True when lead has ≥1 payment and every payment is verified."""
+        payments = self.payments or []
+        if not payments:
+            return False
+        for payment in payments:
+            status = payment.verification_status
+            value = (
+                status.value
+                if hasattr(status, "value")
+                else str(status or "")
+            )
+            if value != PaymentVerificationStatus.verified.value:
+                return False
+        return True
 
 
 class ProspectListResponse(BaseModel):
