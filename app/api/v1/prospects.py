@@ -52,6 +52,17 @@ class StageUpdateRequest(BaseModel):
     stage: str
 
 
+class AssignProspectRequest(BaseModel):
+    model_config = ConfigDict(populate_by_name=True)
+
+    assigned_to_id: Optional[int] = Field(
+        default=None,
+        validation_alias=AliasChoices(
+            "assignedToId", "assigned_to_id", "employeeId", "employee_id"
+        ),
+    )
+
+
 class ExamUpdateRequest(BaseModel):
     model_config = ConfigDict(populate_by_name=True)
 
@@ -446,12 +457,8 @@ async def create_prospect(
                 form, ProspectCreate
             )
 
-            # Auto-assign to logged-in employee if not provided
-            if (
-                current_user
-                and current_user.role == UserRole.employee
-                and not payload.assigned_to_id
-            ):
+            # Employees always own leads they create; admin may pass assignedToId
+            if current_user and current_user.role == UserRole.employee:
                 payload.assigned_to_id = current_user.id
 
             return ProspectService.create(
@@ -464,11 +471,7 @@ async def create_prospect(
 
         body = await request.json()
         payload = ProspectCreate.model_validate(body)
-        if (
-            current_user
-            and current_user.role == UserRole.employee
-            and not payload.assigned_to_id
-        ):
+        if current_user and current_user.role == UserRole.employee:
             payload.assigned_to_id = current_user.id
 
         return ProspectService.create(db, payload, actor_id=actor_id)
@@ -974,6 +977,34 @@ def update_stage(
             else status.HTTP_404_NOT_FOUND
         )
         raise HTTPException(status_code=status_code, detail=detail)
+
+
+@router.patch("/{prospect_id}/assign", response_model=ProspectResponse)
+def assign_prospect(
+    prospect_id: int,
+    payload: AssignProspectRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin),
+):
+    """
+    Admin more-action: assign or reassign a lead to an employee.
+    Body: { "assignedToId": <employeeUserId> } or null to unassign.
+    """
+    try:
+        return ProspectService.assign(
+            db,
+            prospect_id,
+            payload.assigned_to_id,
+            actor_id=current_user.id,
+        )
+    except ValueError as ex:
+        detail = str(ex)
+        code = (
+            status.HTTP_400_BAD_REQUEST
+            if "assignedToId" in detail or "employee" in detail.lower()
+            else status.HTTP_404_NOT_FOUND
+        )
+        raise HTTPException(status_code=code, detail=detail) from ex
 
 
 @router.patch("/{prospect_id}/exam", response_model=ProspectResponse)

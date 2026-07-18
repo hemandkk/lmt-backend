@@ -43,6 +43,12 @@ class User(TimestampMixin, Base):
 
     name = Column(String(255))
 
+    phone = Column(String(30), nullable=True)
+
+    department = Column(String(100), nullable=True)
+
+    designation = Column(String(100), nullable=True)
+
     password_hash = Column(
         String,
         nullable=False

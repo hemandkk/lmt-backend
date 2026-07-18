@@ -87,6 +87,23 @@ def ensure_schema_updates() -> None:
                 except Exception:
                     pass
 
+            if "phone" not in user_cols:
+                conn.execute(
+                    text("ALTER TABLE users ADD COLUMN phone VARCHAR(30)")
+                )
+            if "department" not in user_cols:
+                conn.execute(
+                    text(
+                        "ALTER TABLE users ADD COLUMN department VARCHAR(100)"
+                    )
+                )
+            if "designation" not in user_cols:
+                conn.execute(
+                    text(
+                        "ALTER TABLE users ADD COLUMN designation VARCHAR(100)"
+                    )
+                )
+
         if "incentive_slabs" in tables:
             slab_cols = {
                 col["name"] for col in inspector.get_columns("incentive_slabs")

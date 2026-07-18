@@ -12,6 +12,7 @@ from app.core.security import hash_password
 from app.db.models.payment import Payment, PaymentMethod, PaymentStatus
 from app.db.models.prospect import Prospect, ProspectStage
 from app.db.models.prospect_document import DocumentType, ProspectDocument
+from app.db.models.user import User, UserRole
 from app.repositories.prospect_repository import ProspectRepository
 from app.schemas.prospect import (
     LeadDocumentInput,
@@ -27,6 +28,25 @@ class ProspectService:
     # ------------------------------------------------------------------
     # Helpers
     # ------------------------------------------------------------------
+
+    @staticmethod
+    def _validate_assignee(db: Session, assigned_to_id: Optional[int]) -> None:
+        """Ensure assignee is an active employee when provided."""
+        if assigned_to_id is None:
+            return
+        user = (
+            db.query(User)
+            .filter(
+                User.id == assigned_to_id,
+                User.role == UserRole.employee,
+                User.is_active.is_(True),
+            )
+            .first()
+        )
+        if not user:
+            raise ValueError(
+                "assignedToId must be an active employee."
+            )
 
     @staticmethod
     def _unique_code(
@@ -286,6 +306,8 @@ class ProspectService:
             if existing:
                 raise ValueError("Email already exists.")
 
+        ProspectService._validate_assignee(db, payload.assigned_to_id)
+
         prospect_code = ProspectService._resolve_prospect_code(
             db, payload.prospect_id
         )
@@ -293,7 +315,9 @@ class ProspectService:
         prospect = Prospect(
             prospect_id=prospect_code,
             name=payload.name,
-            password=hash_password(payload.password),
+            password=(
+                hash_password(payload.password) if payload.password else None
+            ),
             email=payload.email,
             phone=payload.phone,
             father_name=payload.father_name,
@@ -420,6 +444,8 @@ class ProspectService:
             exclude_unset=True,
             exclude={"payments", "documents", "replace_payments"},
         )
+        if "assigned_to_id" in data:
+            ProspectService._validate_assignee(db, data.get("assigned_to_id"))
         for key, value in data.items():
             if key == "password":
                 value = hash_password(value)
@@ -516,6 +542,48 @@ class ProspectService:
         )
 
         ProspectRepository.delete(db, prospect)
+
+    @staticmethod
+    def assign(
+        db: Session,
+        prospect_id: int,
+        assigned_to_id: Optional[int],
+        actor_id: Optional[int] = None,
+    ):
+        """Assign or reassign a lead to an employee (or clear with None)."""
+        prospect = ProspectRepository.get_by_id(db, prospect_id)
+        if not prospect:
+            raise ValueError("Prospect not found.")
+
+        ProspectService._validate_assignee(db, assigned_to_id)
+        old_assigned = prospect.assigned_to_id
+        if old_assigned == assigned_to_id:
+            return prospect
+
+        prospect.assigned_to_id = assigned_to_id
+        updated = ProspectRepository.update(db, prospect)
+
+        ActivityLogService.log(
+            db,
+            action="lead_reassigned" if old_assigned else "lead_assigned",
+            entity_type="prospect",
+            entity_id=updated.id,
+            description=(
+                f"Lead {updated.prospect_id} assigned to "
+                f"{assigned_to_id if assigned_to_id else 'unassigned'}"
+                + (f" (was {old_assigned})" if old_assigned else "")
+            ),
+            user_id=actor_id,
+            prospect_id=updated.id,
+            meta_data=None,
+        )
+
+        if updated.assigned_to_id:
+            NotificationService.notify_lead_assigned(
+                db, updated, actor_id=actor_id
+            )
+
+        return ProspectService._after_change_sync(db, updated.id, actor_id)
 
     @staticmethod
     def change_stage(

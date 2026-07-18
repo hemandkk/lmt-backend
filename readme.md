@@ -8,17 +8,23 @@ Best practices
 ✅ Commit migration files to Git.
 
 ✅ Everyone on the team runs:
-# . Change your SQLAlchemy model
-# . Generate a migration
-alembic revision --autogenerate -m "Comment"
-# . Apply it
-alembic upgrade head 
-# . Check
-alembic current  // to check
+
+
+# Change your SQLAlchemy model
+    //Generate a migration
+    alembic revision --autogenerate -m "Comment"
+    //Apply it
+    alembic upgrade head 
+    //Check
+    alembic current  // to check
 
 # Run Backend 
+
+    
     activate venv 
      .venv\Scripts\activate    or .\.venv\Scripts\Activate.ps1   
+     or     source venv/bin/activate
+
      run app 
     .\.venv\Scripts\python.exe -m uvicorn main:app --reload 
 
@@ -30,40 +36,40 @@ alembic current  // to check
  C:\Users\Hemand\AppData\Local\Programs\Python\Python313\python.exe -c "import main; print('ok')"
 
 # A common setup Production
- pip install -r requirements.txt
- alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    pip install -r requirements.txt
+    alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port $PORT
 
 # on EC2
- git pull
+    git pull
 
-source .venv/bin/activate
+    source .venv/bin/activate
 
-pip install -r requirements.txt
+    pip install -r requirements.txt
 
-alembic upgrade head
+    alembic upgrade head
 
-sudo systemctl restart fastapi
+    sudo systemctl restart fastapi
 
 
 #  Run migrations
 
-Execute:
+    Execute:
 
-alembic upgrade head
+    alembic upgrade head
 
-Alembic will:
+    Alembic will:
 
-create the alembic_version table
-run the initial migration
-create every table
-create indexes
-create enums
-create foreign keys
-run every subsequent migration
+    create the alembic_version table
+    run the initial migration
+    create every table
+    create indexes
+    create enums
+    create foreign keys
+    run every subsequent migration
 
-Your database is now fully initialized.
+    Your database is now fully initialized.
 
 
 # Mimo
-mimo auth login
-mimo
+    mimo auth login
+    mimo

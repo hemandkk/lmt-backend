@@ -220,9 +220,9 @@ class ProspectCreate(BaseModel):
             return None
         return value
 
-    @field_validator("course_id", mode="before")
+    @field_validator("course_id", "assigned_to_id", mode="before")
     @classmethod
-    def course_id_from_string(cls, value: Any) -> Any:
+    def id_from_string(cls, value: Any) -> Any:
         if value == "" or value is None:
             return None
         if isinstance(value, str) and value.isdigit():
@@ -288,9 +288,9 @@ class ProspectUpdate(BaseModel):
             return None
         return value
 
-    @field_validator("course_id", mode="before")
+    @field_validator("course_id", "assigned_to_id", mode="before")
     @classmethod
-    def course_id_from_string(cls, value: Any) -> Any:
+    def id_from_string(cls, value: Any) -> Any:
         if value == "" or value is None:
             return None
         if isinstance(value, str) and value.isdigit():
@@ -344,6 +344,12 @@ class ProspectResponse(BaseModel):
     assigned_to_id: Optional[int] = Field(
         default=None, serialization_alias="assignedToId"
     )
+    assigned_to_name: Optional[str] = Field(
+        default=None, serialization_alias="assignedToName"
+    )
+    assigned_to_code: Optional[str] = Field(
+        default=None, serialization_alias="assignedToCode"
+    )
     course_id: Optional[int] = Field(
         default=None, serialization_alias="courseId"
     )
@@ -366,6 +372,31 @@ class ProspectResponse(BaseModel):
 
     payments: list[PaymentResponse] = []
     documents: list[DocumentResponse] = []
+
+    @model_validator(mode="wrap")
+    @classmethod
+    def pull_assignee_fields(cls, data: Any, handler):
+        assignee_name = None
+        assignee_code = None
+        if not isinstance(data, dict):
+            assignee = getattr(data, "assigned_to", None)
+            if assignee is not None:
+                assignee_name = assignee.name
+                assignee_code = assignee.employee_id
+        elif isinstance(data, dict):
+            assignee_name = data.get("assigned_to_name") or data.get(
+                "assignedToName"
+            )
+            assignee_code = data.get("assigned_to_code") or data.get(
+                "assignedToCode"
+            )
+
+        result = handler(data)
+        if assignee_name is not None:
+            result.assigned_to_name = assignee_name
+        if assignee_code is not None:
+            result.assigned_to_code = assignee_code
+        return result
 
     @field_validator("exam_attended", "exam_certified", "sheets_synced", mode="before")
     @classmethod

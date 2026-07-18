@@ -31,18 +31,23 @@ class EmployeeService:
         revenue = AnalyticsRepository.payment_collected(
             db, employee_id=user.id
         )
+        assigned_target = (
+            Decimal(str(user.monthly_sales_target))
+            if user.monthly_sales_target is not None
+            else None
+        )
         return EmployeeResponse(
             id=user.id,
             name=user.name,
             email=user.email,
+            phone=getattr(user, "phone", None),
+            department=getattr(user, "department", None),
+            designation=getattr(user, "designation", None),
             employee_code=user.employee_id,
             role=user.role.value if hasattr(user.role, "value") else str(user.role),
             is_active=bool(user.is_active),
-            assigned_target=(
-                Decimal(str(user.monthly_sales_target))
-                if user.monthly_sales_target is not None
-                else None
-            ),
+            monthly_target=assigned_target,
+            assigned_target=assigned_target,
             effective_target=effective,
             target_assigned=assigned,
             target_source=source,
@@ -73,6 +78,9 @@ class EmployeeService:
                     User.name.ilike(pattern),
                     User.email.ilike(pattern),
                     User.employee_id.ilike(pattern),
+                    User.phone.ilike(pattern),
+                    User.department.ilike(pattern),
+                    User.designation.ilike(pattern),
                 )
             )
 
@@ -103,7 +111,6 @@ class EmployeeService:
             raise ValueError("Employee ID already exists.")
 
         if not code:
-            # Generate simple EMP00N code
             count = (
                 db.query(func.count(User.id))
                 .filter(User.role == UserRole.employee)
@@ -119,6 +126,9 @@ class EmployeeService:
             name=payload.name,
             email=str(payload.email).lower(),
             employee_id=code,
+            phone=(payload.phone or None),
+            department=(payload.department or None),
+            designation=(payload.designation or None),
             password_hash=hash_password(payload.password),
             role=UserRole.employee,
             is_active=payload.is_active,
@@ -157,6 +167,15 @@ class EmployeeService:
 
         if "name" in data and data["name"] is not None:
             user.name = data["name"]
+
+        if "phone" in data:
+            user.phone = data["phone"] or None
+
+        if "department" in data:
+            user.department = data["department"] or None
+
+        if "designation" in data:
+            user.designation = data["designation"] or None
 
         if "password" in data and data["password"]:
             user.password_hash = hash_password(data["password"])

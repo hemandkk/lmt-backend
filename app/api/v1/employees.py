@@ -3,6 +3,7 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 
+from app.core.id_generator import generate_next_code
 from app.db.session import get_db
 from app.dependencies.permissions import require_admin
 from app.db.models.user import User
@@ -20,22 +21,60 @@ router = APIRouter(
 )
 
 
+@router.get("/utility/next-employee-id")
+def get_next_prospect_id(db: Session = Depends(get_db)):
+    try:
+        employee_id = generate_next_code(
+            db=db,
+            model=User,
+            field="employee_id",
+            prefix="EMP",
+            digits=4,
+        )
+        return {"next_id": employee_id, "employeeId": employee_id}
+    except Exception as ex:
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to generate employee id: {ex}",
+        ) from ex
+
+
 @router.get("", response_model=EmployeeListResponse)
 def list_employees(
     page: int = Query(1, ge=1),
-    page_size: int = Query(20, ge=1, le=100, alias="pageSize"),
+    page_size: int = Query(20, ge=1, le=500, alias="pageSize"),
     search: Optional[str] = Query(None),
     is_active: Optional[bool] = Query(None, alias="isActive"),
+    status_filter: Optional[str] = Query(
+        None,
+        alias="status",
+        description="active | inactive | all (frontend alias for isActive)",
+    ),
     db: Session = Depends(get_db),
     current_user: User = Depends(require_admin),
 ):
     """Admin: paginated employee directory."""
+    resolved_active = is_active
+    if status_filter is not None:
+        key = status_filter.strip().lower()
+        if key in ("active", "true", "1"):
+            resolved_active = True
+        elif key in ("inactive", "false", "0"):
+            resolved_active = False
+        elif key in ("all", ""):
+            resolved_active = None
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="status must be active, inactive, or all.",
+            )
+
     return EmployeeService.list(
         db,
         page=page,
         page_size=page_size,
         search=search,
-        is_active=is_active,
+        is_active=resolved_active,
     )
 
 

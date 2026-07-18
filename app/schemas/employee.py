@@ -19,6 +19,9 @@ class EmployeeCreate(BaseModel):
     name: str = Field(..., min_length=1)
     email: EmailStr
     password: str = Field(..., min_length=6)
+    phone: Optional[str] = None
+    department: Optional[str] = None
+    designation: Optional[str] = None
     employee_code: Optional[str] = Field(default=None, alias="employeeId")
     monthly_target: Optional[Decimal] = Field(
         default=None, gt=0, alias="monthlyTarget"
@@ -32,6 +35,9 @@ class EmployeeUpdate(BaseModel):
     name: Optional[str] = Field(default=None, min_length=1)
     email: Optional[EmailStr] = None
     password: Optional[str] = Field(default=None, min_length=6)
+    phone: Optional[str] = None
+    department: Optional[str] = None
+    designation: Optional[str] = None
     employee_code: Optional[str] = Field(default=None, alias="employeeId")
     monthly_target: Optional[Decimal] = Field(
         default=None, gt=0, alias="monthlyTarget"
@@ -50,11 +56,18 @@ class EmployeeResponse(BaseModel):
     id: int
     name: Optional[str] = None
     email: str
+    phone: Optional[str] = None
+    department: Optional[str] = None
+    designation: Optional[str] = None
     employee_code: Optional[str] = Field(
         default=None, serialization_alias="employeeId"
     )
     role: str
     is_active: bool = Field(serialization_alias="isActive")
+    # Frontend edit form uses monthlyTarget (assigned override; null = master default)
+    monthly_target: Optional[Decimal] = Field(
+        default=None, serialization_alias="monthlyTarget"
+    )
     assigned_target: Optional[Decimal] = Field(
         default=None, serialization_alias="assignedTarget"
     )
