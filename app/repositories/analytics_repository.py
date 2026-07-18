@@ -318,60 +318,76 @@ class AnalyticsRepository:
         source: Optional[str] = None,
         limit: Optional[int] = None,
     ) -> list[dict]:
+        """
+        Lead-count based performance (leads = sales):
+        - leads_assigned: leads in date range (or all-time if no range)
+        - leads_converted: those leads with ≥1 completed payment
+        - revenue: still sum of completed payments (money)
+        - total_leads: all-time lead count (ignores date filter)
+        """
+        from sqlalchemy import and_
+
         paid_sq = AnalyticsRepository._paid_amount_subquery(db)
         start_dt, end_dt = datetime_range_bounds(date_from, date_to)
 
-        has_filters = any([stage, source, start_dt, end_dt])
-
-        assigned = func.count(Prospect.id)
+        # Converted = lead has any completed payment (paid_amount > 0)
         converted = func.sum(
-            case((Prospect.stage == ProspectStage.won, 1), else_=0)
+            case((paid_sq.c.paid_amount > 0, 1), else_=0)
         )
+        assigned = func.count(Prospect.id)
         revenue = func.coalesce(func.sum(paid_sq.c.paid_amount), 0)
 
-        if has_filters:
-            query = (
-                db.query(
-                    User.id.label("employee_id"),
-                    User.employee_id.label("employee_code"),
-                    User.name.label("employee_name"),
-                    assigned.label("leads_assigned"),
-                    converted.label("leads_converted"),
-                    revenue.label("revenue"),
-                )
-                .join(Prospect, Prospect.assigned_to_id == User.id)
-                .outerjoin(paid_sq, paid_sq.c.prospect_id == Prospect.id)
-                .filter(User.role == UserRole.employee)
+        # All-time leads subquery (no date filter)
+        total_leads_sq = (
+            db.query(
+                Prospect.assigned_to_id.label("employee_id"),
+                func.count(Prospect.id).label("total_leads"),
             )
-            if stage:
-                query = query.filter(Prospect.stage == stage)
-            if source:
-                query = query.filter(Prospect.source == source)
-            if start_dt:
-                query = query.filter(Prospect.created_at >= start_dt)
-            if end_dt:
-                query = query.filter(Prospect.created_at <= end_dt)
-        else:
-            query = (
-                db.query(
-                    User.id.label("employee_id"),
-                    User.employee_id.label("employee_code"),
-                    User.name.label("employee_name"),
-                    assigned.label("leads_assigned"),
-                    converted.label("leads_converted"),
-                    revenue.label("revenue"),
-                )
-                .outerjoin(Prospect, Prospect.assigned_to_id == User.id)
-                .outerjoin(paid_sq, paid_sq.c.prospect_id == Prospect.id)
-                .filter(User.role == UserRole.employee)
+            .filter(Prospect.assigned_to_id.isnot(None))
+            .group_by(Prospect.assigned_to_id)
+            .subquery()
+        )
+
+        join_cond = Prospect.assigned_to_id == User.id
+        period_filters = []
+        if start_dt is not None:
+            period_filters.append(Prospect.created_at >= start_dt)
+        if end_dt is not None:
+            period_filters.append(Prospect.created_at <= end_dt)
+        if stage:
+            period_filters.append(Prospect.stage == stage)
+        if source:
+            period_filters.append(Prospect.source == source)
+        if period_filters:
+            join_cond = and_(join_cond, *period_filters)
+
+        query = (
+            db.query(
+                User.id.label("employee_id"),
+                User.employee_id.label("employee_code"),
+                User.name.label("employee_name"),
+                assigned.label("leads_assigned"),
+                converted.label("leads_converted"),
+                revenue.label("revenue"),
+                func.coalesce(total_leads_sq.c.total_leads, 0).label(
+                    "total_leads"
+                ),
             )
+            .outerjoin(Prospect, join_cond)
+            .outerjoin(paid_sq, paid_sq.c.prospect_id == Prospect.id)
+            .outerjoin(total_leads_sq, total_leads_sq.c.employee_id == User.id)
+            .filter(User.role == UserRole.employee, User.is_active.is_(True))
+        )
 
         if employee_id is not None:
             query = query.filter(User.id == employee_id)
 
-        query = query.group_by(User.id, User.employee_id, User.name).order_by(
-            revenue.desc()
-        )
+        query = query.group_by(
+            User.id,
+            User.employee_id,
+            User.name,
+            total_leads_sq.c.total_leads,
+        ).order_by(assigned.desc(), revenue.desc())
 
         if limit:
             query = query.limit(limit)
@@ -380,7 +396,9 @@ class AnalyticsRepository:
         for row in query.all():
             assigned_count = int(row.leads_assigned or 0)
             converted_count = int(row.leads_converted or 0)
-            rate = (converted_count / assigned_count * 100) if assigned_count else 0.0
+            rate = (
+                (converted_count / assigned_count * 100) if assigned_count else 0.0
+            )
             results.append(
                 {
                     "employee_id": row.employee_id,
@@ -390,6 +408,7 @@ class AnalyticsRepository:
                     "leads_converted": converted_count,
                     "revenue": Decimal(row.revenue or 0),
                     "conversion_rate": round(rate, 2),
+                    "total_leads": int(row.total_leads or 0),
                 }
             )
         return results
@@ -617,11 +636,15 @@ class AnalyticsRepository:
 
         if achieved is None:
             current = today()
-            achieved = AnalyticsRepository.payment_collected(
-                db,
-                employee_id=employee_id,
-                date_from=start_of_month(current),
-                date_to=end_of_month(current),
+            achieved = Decimal(
+                str(
+                    AnalyticsRepository.count_leads(
+                        db,
+                        employee_id=employee_id,
+                        date_from=start_of_month(current),
+                        date_to=end_of_month(current),
+                    )
+                )
             )
         achieved = Decimal(str(achieved or 0))
 

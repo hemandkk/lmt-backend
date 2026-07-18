@@ -62,15 +62,17 @@ def _metrics_for_scope(
         date_to=date_to,
     )
     exam = AnalyticsRepository.exam_stats(db, employee_id=employee_id)
-    month_collected = payment_collected["this_month"]
+    # Targets / incentives are lead-count based (leads = sales)
+    month_leads = lead_counts["this_month"]
     target = AnalyticsRepository.sales_target_summary(
         db,
         employee_id=employee_id,
-        achieved=month_collected,
+        achieved=Decimal(str(month_leads)),
     )
     incentive = AnalyticsRepository.incentive_status(
         db,
         employee_id=employee_id,
+        lead_count=month_leads,
     )
 
     return {
@@ -117,12 +119,41 @@ def _employee_overviews(
 def _enrich_performance(
     db: Session,
     rows: list[dict],
+    date_from: Optional[date] = None,
+    date_to: Optional[date] = None,
 ) -> list[EmployeePerformanceItem]:
     enriched: list[EmployeePerformanceItem] = []
     for row in rows:
         emp_id = row.get("employee_id")
         metrics = (
-            _metrics_for_scope(db, employee_id=emp_id)
+            _metrics_for_scope(
+                db,
+                employee_id=emp_id,
+                date_from=date_from,
+                date_to=date_to,
+            )
+            if emp_id is not None
+            else None
+        )
+        # Monthly target progress always uses this-month lead count
+        month_leads = (
+            metrics["lead_counts"].this_month if metrics else 0
+        )
+        target = (
+            AnalyticsRepository.sales_target_summary(
+                db,
+                employee_id=emp_id,
+                achieved=Decimal(str(month_leads)),
+            )
+            if emp_id is not None
+            else None
+        )
+        incentive = (
+            AnalyticsRepository.incentive_status(
+                db,
+                employee_id=emp_id,
+                lead_count=month_leads,
+            )
             if emp_id is not None
             else None
         )
@@ -133,25 +164,32 @@ def _enrich_performance(
                 employee_name=row.get("employee_name") or "Unknown",
                 leads_assigned=row.get("leads_assigned", 0),
                 leads_converted=row.get("leads_converted", 0),
+                total_leads=row.get("total_leads", 0),
                 revenue=row.get("revenue", Decimal("0")),
                 conversion_rate=row.get("conversion_rate", 0.0),
                 target_achieved=(
-                    metrics["target_achieved"] if metrics else Decimal("0")
+                    Decimal(str(target["target_achieved"]))
+                    if target
+                    else Decimal("0")
                 ),
                 monthly_target=(
-                    metrics["monthly_target"] if metrics else Decimal("0")
+                    Decimal(str(target["monthly_target"]))
+                    if target
+                    else Decimal("0")
                 ),
                 target_status=(
-                    metrics["target_status"] if metrics else "not_started"
+                    target["target_status"] if target else "not_started"
                 ),
                 target_assigned=(
-                    metrics["target_assigned"] if metrics else False
+                    target.get("target_assigned", False) if target else False
                 ),
                 target_source=(
-                    metrics["target_source"] if metrics else "default"
+                    target.get("target_source", "default") if target else "default"
                 ),
                 incentive_amount=(
-                    metrics["incentive"].amount if metrics else Decimal("0")
+                    Decimal(str(incentive.get("amount") or 0))
+                    if incentive
+                    else Decimal("0")
                 ),
                 incentive_rate=Decimal("0"),
                 exam_attended=(
@@ -285,9 +323,13 @@ class DashboardService:
             conversion_rate=conversion_rate,
             certificates_issued=exam.certified,
             revenue_by_month=revenue_by_month,
-            employee_performance=_enrich_performance(db, performance),
+            employee_performance=_enrich_performance(
+                db, performance, date_from=date_from, date_to=date_to
+            ),
             monthly_sales_trend=monthly_items,
-            top_performers=_enrich_performance(db, top),
+            top_performers=_enrich_performance(
+                db, top, date_from=date_from, date_to=date_to
+            ),
             employees=employees,
         )
 
@@ -405,7 +447,9 @@ class ReportService:
             stage=stage,
             source=source,
         )
-        enriched = _enrich_performance(db, performance)
+        enriched = _enrich_performance(
+            db, performance, date_from=date_from, date_to=date_to
+        )
         monthly = AnalyticsRepository.monthly_sales(
             db,
             employee_id=employee_id,
@@ -510,7 +554,9 @@ class ReportService:
             date_to=date_to,
             employee_id=employee_id,
         )
-        enriched = _enrich_performance(db, performance)
+        enriched = _enrich_performance(
+            db, performance, date_from=date_from, date_to=date_to
+        )
         return RevenueReportResponse(
             total_revenue=AnalyticsRepository.payment_collected(
                 db,
@@ -562,7 +608,9 @@ class ReportService:
             stage=stage,
             source=source,
         )
-        items = _enrich_performance(db, performance)
+        items = _enrich_performance(
+            db, performance, date_from=date_from, date_to=date_to
+        )
         return EmployeePerformanceReportResponse(
             items=items,
             total=len(items),

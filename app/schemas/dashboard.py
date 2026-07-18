@@ -146,6 +146,7 @@ class EmployeePerformanceItem(BaseModel):
     employee_name: str = Field(serialization_alias="employeeName")
     leads_assigned: int = Field(default=0, serialization_alias="leadsAssigned")
     leads_converted: int = Field(default=0, serialization_alias="leadsConverted")
+    total_leads: int = Field(default=0, serialization_alias="totalLeads")
     revenue: Decimal = Decimal("0")
     conversion_rate: float = Field(default=0.0, serialization_alias="conversionRate")
     target_achieved: Decimal = Field(
