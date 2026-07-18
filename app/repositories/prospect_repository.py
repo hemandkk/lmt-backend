@@ -14,6 +14,8 @@ class ProspectRepository:
             selectinload(Prospect.payments),
             selectinload(Prospect.documents),
             joinedload(Prospect.assigned_to),
+            joinedload(Prospect.created_by),
+            joinedload(Prospect.updated_by),
             joinedload(Prospect.course),
         )
 

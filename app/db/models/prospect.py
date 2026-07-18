@@ -156,6 +156,18 @@ class Prospect(TimestampMixin, Base):
         nullable=True,
     )
 
+    created_by_id = Column(
+        Integer,
+        ForeignKey("users.id"),
+        nullable=True,
+    )
+
+    updated_by_id = Column(
+        Integer,
+        ForeignKey("users.id"),
+        nullable=True,
+    )
+
     # Exam
 
     exam_attended = Column(
@@ -185,6 +197,17 @@ class Prospect(TimestampMixin, Base):
     assigned_to = relationship(
         "User",
         back_populates="prospects",
+        foreign_keys=[assigned_to_id],
+    )
+
+    created_by = relationship(
+        "User",
+        foreign_keys=[created_by_id],
+    )
+
+    updated_by = relationship(
+        "User",
+        foreign_keys=[updated_by_id],
     )
 
     course = relationship(

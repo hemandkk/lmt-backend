@@ -64,6 +64,23 @@ def ensure_schema_updates() -> None:
                     )
                 )
 
+            if "created_by_id" not in existing:
+                conn.execute(
+                    text(
+                        "ALTER TABLE prospects "
+                        "ADD COLUMN created_by_id INTEGER "
+                        "REFERENCES users(id)"
+                    )
+                )
+            if "updated_by_id" not in existing:
+                conn.execute(
+                    text(
+                        "ALTER TABLE prospects "
+                        "ADD COLUMN updated_by_id INTEGER "
+                        "REFERENCES users(id)"
+                    )
+                )
+
         if "users" in tables:
             user_cols = {col["name"] for col in inspector.get_columns("users")}
             if "monthly_sales_target" not in user_cols:

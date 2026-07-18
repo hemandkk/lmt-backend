@@ -84,15 +84,27 @@ class ExportService:
             "Delivery Date",
             "Estimated Value",
             "Total Paid",
+            "Balance Amount",
+            "Payment Count",
             "Payment %",
             "Stage",
+            "Current Lead Stage",
             "Source",
             "Follow-up Date",
+            "Next Follow-up",
+            "Lead Owner",
             "Assigned To",
             "Assigned To Code",
+            "Department",
+            "Designation",
             "Exam Attended",
             "Exam Certified",
+            "Certificate Status",
+            "Remarks",
             "Notes",
+            "Last Activity",
+            "Created By",
+            "Last Updated By",
             "Created At",
             "Updated At",
         ]
@@ -105,10 +117,13 @@ class ExportService:
             ]
         )
 
+        from app.services.lead_sheet_fields import build_lead_sync_fields
+
         rows: list[list[Any]] = []
         for p in prospects:
             estimated = Decimal(str(p.estimated_deal_value or 0))
             total_paid = Decimal("0")
+            payment_count = 0
             payment_lines: list[str] = []
             receipt_urls: list[str] = []
 
@@ -120,6 +135,7 @@ class ExportService:
                 )
                 if status_val == PaymentStatus.completed.value:
                     total_paid += Decimal(str(pay.amount or 0))
+                    payment_count += 1
 
                 ptype = (
                     pay.payment_type.value
@@ -148,6 +164,10 @@ class ExportService:
                 if receipt:
                     receipt_urls.append(f"{pay.payment_id}: {receipt}")
 
+            balance = estimated - total_paid
+            if balance < 0:
+                balance = Decimal("0")
+
             pct = (
                 float((total_paid / estimated * Decimal("100")).quantize(Decimal("0.01")))
                 if estimated > 0
@@ -161,7 +181,6 @@ class ExportService:
                     if hasattr(doc.document_type, "value")
                     else str(doc.document_type)
                 )
-                # Keep latest / last seen URL for type
                 docs_by_type[dtype] = ExportService._absolute_file_url(doc.file_url)
 
             assigned_name = ""
@@ -179,6 +198,7 @@ class ExportService:
             stage_val = (
                 p.stage.value if hasattr(p.stage, "value") else str(p.stage or "")
             )
+            extra = build_lead_sync_fields(p, db=db)
 
             row: list[Any] = [
                 p.prospect_id,
@@ -190,23 +210,35 @@ class ExportService:
                 p.mother_name or "",
                 course_name,
                 p.specialization or "",
-                getattr(p, "university", None) or "",
+                extra.get("university", ""),
                 p.address or "",
                 p.delivery_address or "",
                 str(p.delivery_date or ""),
                 float(estimated),
                 float(total_paid),
+                float(balance),
+                payment_count,
                 pct,
                 stage_val,
+                extra.get("current_lead_stage", stage_val),
                 p.source or "",
-                str(p.follow_up_date or ""),
+                extra.get("follow_up_date", ""),
+                extra.get("next_follow_up", ""),
+                extra.get("lead_owner", assigned_name),
                 assigned_name,
                 assigned_code,
-                "Yes" if p.exam_attended else "No",
-                "Yes" if p.exam_certified else "No",
+                extra.get("department", ""),
+                extra.get("designation", ""),
+                extra.get("exam_attended", ""),
+                extra.get("exam_certified", ""),
+                extra.get("certificate_status", ""),
+                extra.get("remarks", ""),
                 p.notes or "",
-                str(p.created_at or ""),
-                str(p.updated_at or ""),
+                extra.get("last_activity", ""),
+                extra.get("created_by", ""),
+                extra.get("last_updated_by", ""),
+                extra.get("created_at", str(p.created_at or "")),
+                extra.get("updated_at", str(p.updated_at or "")),
             ]
             for dt in doc_types:
                 row.append(docs_by_type.get(dt.value, ""))

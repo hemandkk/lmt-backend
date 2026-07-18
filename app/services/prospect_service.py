@@ -335,6 +335,8 @@ class ProspectService:
             source=payload.source,
             follow_up_date=payload.follow_up_date,
             stage=payload.stage or ProspectStage.new,
+            created_by_id=actor_id,
+            updated_by_id=actor_id,
         )
 
         receipt_files = receipt_files or {}
@@ -451,6 +453,9 @@ class ProspectService:
                 value = hash_password(value)
             setattr(prospect, key, value)
 
+        if actor_id is not None:
+            prospect.updated_by_id = actor_id
+
         if payload.payments is not None:
             ProspectService._sync_payments(
                 db,
@@ -561,6 +566,8 @@ class ProspectService:
             return prospect
 
         prospect.assigned_to_id = assigned_to_id
+        if actor_id is not None:
+            prospect.updated_by_id = actor_id
         updated = ProspectRepository.update(db, prospect)
 
         ActivityLogService.log(
@@ -613,6 +620,8 @@ class ProspectService:
             else str(prospect.stage)
         )
         prospect.stage = stage
+        if actor_id is not None:
+            prospect.updated_by_id = actor_id
         updated = ProspectRepository.update(db, prospect)
 
         new_stage = (
@@ -647,5 +656,7 @@ class ProspectService:
             prospect.exam_attended = attended
         if certified is not None:
             prospect.exam_certified = certified
+        if actor_id is not None:
+            prospect.updated_by_id = actor_id
         ProspectRepository.update(db, prospect)
         return ProspectService._after_change_sync(db, prospect_id, actor_id)

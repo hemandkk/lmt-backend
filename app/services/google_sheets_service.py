@@ -13,6 +13,11 @@ from app.core.config import settings
 from app.db.models.payment import PaymentStatus
 from app.db.models.prospect import Prospect
 from app.db.models.prospect_document import DocumentType
+from app.services.lead_sheet_fields import (
+    EXTRA_SYNC_HEADERS,
+    build_lead_sync_fields,
+    extra_sync_values,
+)
 from app.services.notification_service import ActivityLogService
 
 logger = logging.getLogger(__name__)
@@ -50,9 +55,20 @@ SHEET_HEADERS = [
     "Last Payment Date",
     "Last Payment Type",
     "Sync Status",
+    *EXTRA_SYNC_HEADERS,
 ]
 
-LAST_COLUMN_LETTER = "AA"  # 27 columns
+
+def _column_letter(n: int) -> str:
+    """1-based column index → Excel letter(s)."""
+    result = ""
+    while n > 0:
+        n, rem = divmod(n - 1, 26)
+        result = chr(65 + rem) + result
+    return result
+
+
+LAST_COLUMN_LETTER = _column_letter(len(SHEET_HEADERS))
 
 DOC_COLUMN_MAP = {
     DocumentType.aadhaar: "Aadhaar",
@@ -206,7 +222,7 @@ class GoogleSheetsService:
         }
 
     @staticmethod
-    def build_row(prospect: Prospect) -> list[str]:
+    def build_row(prospect: Prospect, db: Session | None = None) -> list[str]:
         docs = GoogleSheetsService._document_urls(prospect)
         payments = GoogleSheetsService._payment_summary(prospect)
         course_name = ""
@@ -221,6 +237,7 @@ class GoogleSheetsService:
             )
 
         created = getattr(prospect, "created_at", None) or datetime.utcnow()
+        extra = build_lead_sync_fields(prospect, db=db)
 
         return [
             GoogleSheetsService._format_value(created),
@@ -250,28 +267,13 @@ class GoogleSheetsService:
             payments["last_date"],
             payments["last_type"],
             "synced",
+            *extra_sync_values(extra),
         ]
 
     @staticmethod
     def _ensure_header_row(service) -> None:
+        """Write/refresh header row so newly added columns are always present."""
         spreadsheet_id = settings.GOOGLE_SHEETS_SPREADSHEET_ID
-        result = (
-            service.spreadsheets()
-            .values()
-            .get(
-                spreadsheetId=spreadsheet_id,
-                range=GoogleSheetsService._worksheet_range(
-                    f"A1:{LAST_COLUMN_LETTER}1"
-                ),
-            )
-            .execute()
-        )
-        values = result.get("values") or []
-        if values and any(
-            isinstance(cell, str) and cell.strip() for cell in values[0]
-        ):
-            return
-
         service.spreadsheets().values().update(
             spreadsheetId=spreadsheet_id,
             range=GoogleSheetsService._worksheet_range("A1"),
@@ -335,7 +337,7 @@ class GoogleSheetsService:
         return GoogleSheetsService._worksheet_range(cell_range)
 
     @staticmethod
-    def upsert_lead_row(prospect: Prospect) -> str:
+    def upsert_lead_row(prospect: Prospect, db: Session | None = None) -> str:
         """
         Create or update the sheet row for this lead (matched by Lead ID).
         Retries transient failures with exponential backoff.
@@ -346,7 +348,7 @@ class GoogleSheetsService:
             )
 
         _, _, HttpError = _import_google()
-        row = GoogleSheetsService.build_row(prospect)
+        row = GoogleSheetsService.build_row(prospect, db=db)
         lead_id = str(prospect.prospect_id)
         attempts = max(1, settings.GOOGLE_SHEETS_MAX_RETRIES)
         backoff = settings.GOOGLE_SHEETS_RETRY_BACKOFF_SECONDS
@@ -430,7 +432,7 @@ class GoogleSheetsService:
             return prospect
 
         try:
-            updated_range = GoogleSheetsService.upsert_lead_row(prospect)
+            updated_range = GoogleSheetsService.upsert_lead_row(prospect, db=db)
             prospect.sheets_synced = True
             prospect.sheets_row_id = (
                 updated_range[:50] if updated_range else None
