@@ -85,6 +85,9 @@ class TeamSalesResponse(BaseModel):
     employee_id: Optional[int] = Field(
         default=None, serialization_alias="employeeId"
     )
+    supervisor_id: Optional[int] = Field(
+        default=None, serialization_alias="supervisorId"
+    )
 
 
 class TeamPerformanceItem(BaseModel):
@@ -119,6 +122,12 @@ class TeamPerformanceResponse(BaseModel):
     high_count: int = Field(serialization_alias="highCount")
     average_count: int = Field(serialization_alias="averageCount")
     low_count: int = Field(serialization_alias="lowCount")
+    employee_id: Optional[int] = Field(
+        default=None, serialization_alias="employeeId"
+    )
+    supervisor_id: Optional[int] = Field(
+        default=None, serialization_alias="supervisorId"
+    )
 
 
 class TeamPaymentsResponse(BaseModel):
@@ -131,6 +140,9 @@ class TeamPaymentsResponse(BaseModel):
     )
     employee_id: Optional[int] = Field(
         default=None, serialization_alias="employeeId"
+    )
+    supervisor_id: Optional[int] = Field(
+        default=None, serialization_alias="supervisorId"
     )
 
 
@@ -152,6 +164,9 @@ class TeamAnalyticsResponse(BaseModel):
     employee_id: Optional[int] = Field(
         default=None, serialization_alias="employeeId"
     )
+    supervisor_id: Optional[int] = Field(
+        default=None, serialization_alias="supervisorId"
+    )
 
 
 class TeamOverviewResponse(BaseModel):
@@ -168,3 +183,9 @@ class TeamOverviewResponse(BaseModel):
         default=None, serialization_alias="dateFrom"
     )
     date_to: Optional[date] = Field(default=None, serialization_alias="dateTo")
+    employee_id: Optional[int] = Field(
+        default=None, serialization_alias="employeeId"
+    )
+    supervisor_id: Optional[int] = Field(
+        default=None, serialization_alias="supervisorId"
+    )

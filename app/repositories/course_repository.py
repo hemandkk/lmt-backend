@@ -59,6 +59,16 @@ class CourseRepository:
         return course
 
     @staticmethod
+    def update(
+        db: Session,
+        course: Course,
+    ):
+        db.add(course)
+        db.commit()
+        db.refresh(course)
+        return course
+
+    @staticmethod
     def delete(
         db: Session,
         course: Course,

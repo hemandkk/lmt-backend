@@ -363,6 +363,8 @@ class TeamService:
             "high_count": high,
             "average_count": average,
             "low_count": low,
+            "employee_id": employee_id,
+            "supervisor_id": supervisor_id,
         }
 
     @staticmethod
@@ -450,6 +452,7 @@ class TeamService:
             "conversion_rate": rate,
             "monthly": monthly,
             "employee_id": employee_id,
+            "supervisor_id": supervisor_id,
         }
 
     @staticmethod
@@ -538,6 +541,7 @@ class TeamService:
             },
             "lead_payment_status": lead_status,
             "employee_id": employee_id,
+            "supervisor_id": supervisor_id,
         }
 
     @staticmethod
@@ -632,6 +636,7 @@ class TeamService:
             "exam_stats": exam,
             "lead_counts": lead_counts,
             "employee_id": employee_id,
+            "supervisor_id": supervisor_id,
         }
 
     @staticmethod
@@ -641,6 +646,7 @@ class TeamService:
         *,
         date_from: Optional[date] = None,
         date_to: Optional[date] = None,
+        employee_id: Optional[int] = None,
         supervisor_id: Optional[int] = None,
     ) -> dict:
         perf = TeamService.performance(
@@ -648,6 +654,7 @@ class TeamService:
             viewer,
             date_from=date_from,
             date_to=date_to,
+            employee_id=employee_id,
             supervisor_id=supervisor_id,
         )
         sales = TeamService.sales(
@@ -655,6 +662,7 @@ class TeamService:
             viewer,
             date_from=date_from,
             date_to=date_to,
+            employee_id=employee_id,
             supervisor_id=supervisor_id,
         )
         return {
@@ -667,4 +675,6 @@ class TeamService:
             "conversion_rate": sales["conversion_rate"],
             "date_from": date_from,
             "date_to": date_to,
+            "employee_id": employee_id,
+            "supervisor_id": supervisor_id,
         }

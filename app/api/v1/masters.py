@@ -1,6 +1,14 @@
 from decimal import Decimal
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import (
+    APIRouter,
+    Depends,
+    File,
+    HTTPException,
+    Query,
+    UploadFile,
+    status,
+)
 from sqlalchemy.orm import Session
 
 from app.db.models.user import User
@@ -12,6 +20,7 @@ from app.schemas.master import (
     BulkEmployeeMonthlyTargetResponse,
     CourseCreate,
     CourseResponse,
+    CourseUpdate,
     DefaultSalesTargetResponse,
     DefaultSalesTargetUpdate,
     EmployeeSalesTargetAssign,
@@ -19,7 +28,11 @@ from app.schemas.master import (
     IncentiveSlabCreate,
     IncentiveSlabResponse,
     IncentiveSlabUpdate,
+    MasterImportResponse,
     SalesTargetOverviewResponse,
+    SpecializationCreate,
+    SpecializationResponse,
+    SpecializationUpdate,
     UpdateIncentiveSlabsRequest,
 )
 from app.services.master_service import MasterService
@@ -32,7 +45,7 @@ router = APIRouter(
 
 # ==========================================================
 # Courses — all authenticated users can read;
-# create/delete are admin-only
+# create/update/delete/import are admin-only
 # ==========================================================
 
 @router.get(
@@ -49,6 +62,7 @@ def get_courses(
 @router.post(
     "/courses",
     response_model=CourseResponse,
+    status_code=status.HTTP_201_CREATED,
 )
 def create_course(
     payload: CourseCreate,
@@ -59,6 +73,45 @@ def create_course(
         return MasterService.create_course(db, payload)
     except ValueError as ex:
         raise HTTPException(status_code=400, detail=str(ex)) from ex
+
+
+@router.post(
+    "/courses/import",
+    response_model=MasterImportResponse,
+)
+async def import_courses(
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    user: User = Depends(require_admin),
+):
+    """
+    Import courses from CSV or Excel (.xlsx).
+    Headers (case-insensitive): name (required), courseCode, specialization,
+    duration, fees, description, active.
+    Existing names are updated; new names are created.
+    """
+    try:
+        return await MasterService.import_courses(db, file)
+    except ValueError as ex:
+        raise HTTPException(status_code=400, detail=str(ex)) from ex
+
+
+@router.put(
+    "/courses/{course_id}",
+    response_model=CourseResponse,
+)
+def update_course(
+    course_id: int,
+    payload: CourseUpdate,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_admin),
+):
+    try:
+        return MasterService.update_course(db, course_id, payload)
+    except ValueError as ex:
+        detail = str(ex)
+        code = 404 if detail == "Course not found." else 400
+        raise HTTPException(status_code=code, detail=detail) from ex
 
 
 @router.delete("/courses/{course_id}")
@@ -72,6 +125,93 @@ def delete_course(
     except ValueError as ex:
         raise HTTPException(status_code=404, detail=str(ex)) from ex
     return {"message": "Course deleted."}
+
+
+# ==========================================================
+# Specializations — lead dropdown master (not FK-linked).
+# Read: all authenticated; write/import: admin.
+# ==========================================================
+
+@router.get(
+    "/specializations",
+    response_model=list[SpecializationResponse],
+)
+def get_specializations(
+    active_only: bool = Query(False, alias="activeOnly"),
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    return MasterService.get_specializations(db, active_only=active_only)
+
+
+@router.post(
+    "/specializations",
+    response_model=SpecializationResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+def create_specialization(
+    payload: SpecializationCreate,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_admin),
+):
+    try:
+        return MasterService.create_specialization(db, payload)
+    except ValueError as ex:
+        raise HTTPException(status_code=400, detail=str(ex)) from ex
+
+
+@router.post(
+    "/specializations/import",
+    response_model=MasterImportResponse,
+)
+async def import_specializations(
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    user: User = Depends(require_admin),
+):
+    """
+    Import specializations from CSV or Excel (.xlsx).
+    Headers (case-insensitive): name (required), specializationCode,
+    description, active.
+    Existing names are updated; new names are created.
+    """
+    try:
+        return await MasterService.import_specializations(db, file)
+    except ValueError as ex:
+        raise HTTPException(status_code=400, detail=str(ex)) from ex
+
+
+@router.put(
+    "/specializations/{specialization_id}",
+    response_model=SpecializationResponse,
+)
+def update_specialization(
+    specialization_id: int,
+    payload: SpecializationUpdate,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_admin),
+):
+    try:
+        return MasterService.update_specialization(
+            db, specialization_id, payload
+        )
+    except ValueError as ex:
+        detail = str(ex)
+        code = 404 if detail == "Specialization not found." else 400
+        raise HTTPException(status_code=code, detail=detail) from ex
+
+
+@router.delete("/specializations/{specialization_id}")
+def delete_specialization(
+    specialization_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_admin),
+):
+    try:
+        MasterService.delete_specialization(db, specialization_id)
+    except ValueError as ex:
+        raise HTTPException(status_code=404, detail=str(ex)) from ex
+    return {"message": "Specialization deleted."}
 
 
 # ==========================================================

@@ -99,16 +99,23 @@ def update_team_assignment(
 def team_overview(
     date_from: Optional[date] = Query(None, alias="dateFrom"),
     date_to: Optional[date] = Query(None, alias="dateTo"),
+    employee_id: Optional[int] = Query(None, alias="employeeId"),
     supervisor_id: Optional[int] = Query(None, alias="supervisorId"),
     db: Session = Depends(get_db),
     current_user: User = Depends(require_team_viewer),
 ):
+    """
+    Team overview KPIs.
+    Admin: all employees, or filter with employeeId and/or supervisorId.
+    Manager/sales_head: own team (optionally narrowed with employeeId).
+    """
     try:
         return TeamService.overview(
             db,
             current_user,
             date_from=date_from,
             date_to=date_to,
+            employee_id=employee_id,
             supervisor_id=supervisor_id,
         )
     except ValueError as ex:

@@ -12,6 +12,7 @@ from app.db.base import Base
 from app.db.models.activity_log import ActivityLog
 from app.db.models.app_setting import AppSetting
 from app.db.models.course import Course
+from app.db.models.specialization import Specialization
 from app.db.models.incentive_slab import IncentiveSlab
 from app.db.models.notification import Notification
 from app.db.models.payment import Payment

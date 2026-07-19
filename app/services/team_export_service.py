@@ -124,9 +124,10 @@ class TeamExportService:
                 ["Conversion Rate %", data["conversion_rate"]],
             ]
             for m in data["monthly"]:
+                # monthly[] uses month name (e.g. "Jul"), not a numeric month
                 rows.append(
                     [
-                        f"{m['year']}-{int(m['month']):02d}",
+                        f"{m['month']} {m['year']}",
                         f"Revenue={m['revenue']}, Deals={m['deals']}",
                     ]
                 )

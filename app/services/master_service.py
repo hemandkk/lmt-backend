@@ -1,25 +1,37 @@
 from decimal import Decimal
 
+from fastapi import UploadFile
 from sqlalchemy.orm import Session
 
 from app.core.id_generator import generate_next_code
 from app.db.models.course import Course
 from app.db.models.incentive_slab import IncentiveSlab
+from app.db.models.specialization import Specialization
 from app.db.models.user import User, UserRole
 from app.repositories.course_repository import CourseRepository
 from app.repositories.incentive_repository import IncentiveRepository
 from app.repositories.settings_repository import SettingsRepository
+from app.repositories.specialization_repository import SpecializationRepository
 from app.schemas.master import (
     BulkEmployeeMonthlyTargetRequest,
     BulkEmployeeMonthlyTargetResponse,
     CourseCreate,
+    CourseUpdate,
     DefaultSalesTargetResponse,
     EmployeeSalesTargetAssign,
     EmployeeSalesTargetItem,
     IncentiveSlabCreate,
     IncentiveSlabUpdate,
+    MasterImportResponse,
     SalesTargetOverviewResponse,
+    SpecializationCreate,
+    SpecializationUpdate,
     UpdateIncentiveSlabsRequest,
+)
+from app.services.master_import import (
+    map_course_row,
+    map_specialization_row,
+    read_tabular_rows,
 )
 
 
@@ -78,11 +90,222 @@ class MasterService:
         return CourseRepository.create(db, course)
 
     @staticmethod
+    def update_course(db: Session, course_id: int, payload: CourseUpdate):
+        course = CourseRepository.get_by_id(db, course_id)
+        if not course:
+            raise ValueError("Course not found.")
+
+        data = payload.model_dump(exclude_unset=True)
+        if "name" in data and data["name"]:
+            existing = CourseRepository.get_by_name(db, data["name"])
+            if existing and existing.id != course.id:
+                raise ValueError("Course already exists.")
+        if "course_code" in data and data["course_code"]:
+            existing_code = (
+                db.query(Course)
+                .filter(Course.course_code == data["course_code"])
+                .first()
+            )
+            if existing_code and existing_code.id != course.id:
+                raise ValueError(
+                    f"Course code {data['course_code']} already exists."
+                )
+
+        for key, value in data.items():
+            setattr(course, key, value)
+        return CourseRepository.update(db, course)
+
+    @staticmethod
     def delete_course(db: Session, course_id: int):
         course = CourseRepository.get_by_id(db, course_id)
         if not course:
             raise ValueError("Course not found.")
         CourseRepository.delete(db, course)
+
+    @staticmethod
+    async def import_courses(
+        db: Session, file: UploadFile
+    ) -> MasterImportResponse:
+        rows = await read_tabular_rows(file)
+        created = updated = skipped = 0
+        errors: list[str] = []
+
+        for index, raw in enumerate(rows, start=2):
+            try:
+                data = map_course_row(raw)
+            except ValueError as exc:
+                errors.append(f"Row {index}: {exc}")
+                skipped += 1
+                continue
+
+            existing = CourseRepository.get_by_name(db, data["name"])
+            if existing:
+                for key, value in data.items():
+                    if key == "course_code" and not value:
+                        continue
+                    if value is not None:
+                        setattr(existing, key, value)
+                CourseRepository.update(db, existing)
+                updated += 1
+                continue
+
+            course_code = data["course_code"] or generate_next_code(
+                db, Course, "course_code", "CRS"
+            )
+            if (
+                db.query(Course)
+                .filter(Course.course_code == course_code)
+                .first()
+            ):
+                errors.append(
+                    f"Row {index}: Course code {course_code} already exists."
+                )
+                skipped += 1
+                continue
+
+            CourseRepository.create(
+                db,
+                Course(
+                    course_code=course_code,
+                    name=data["name"],
+                    specialization=data.get("specialization"),
+                    duration=data.get("duration"),
+                    fees=data.get("fees"),
+                    description=data.get("description"),
+                    is_active=data.get("is_active", True),
+                ),
+            )
+            created += 1
+
+        return MasterImportResponse(
+            created=created,
+            updated=updated,
+            skipped=skipped,
+            errors=errors,
+        )
+
+    # --------------------------------------------------
+    # Specializations
+    # --------------------------------------------------
+
+    @staticmethod
+    def get_specializations(db: Session, *, active_only: bool = False):
+        return SpecializationRepository.get_all(db, active_only=active_only)
+
+    @staticmethod
+    def create_specialization(db: Session, payload: SpecializationCreate):
+        existing = SpecializationRepository.get_by_name(db, payload.name)
+        if existing:
+            raise ValueError("Specialization already exists.")
+
+        code = payload.specialization_code or generate_next_code(
+            db, Specialization, "specialization_code", "SPC"
+        )
+        if SpecializationRepository.get_by_code(db, code):
+            raise ValueError(f"Specialization code {code} already exists.")
+
+        specialization = Specialization(
+            specialization_code=code,
+            name=payload.name,
+            description=payload.description,
+            is_active=payload.is_active,
+        )
+        return SpecializationRepository.create(db, specialization)
+
+    @staticmethod
+    def update_specialization(
+        db: Session,
+        specialization_id: int,
+        payload: SpecializationUpdate,
+    ):
+        specialization = SpecializationRepository.get_by_id(
+            db, specialization_id
+        )
+        if not specialization:
+            raise ValueError("Specialization not found.")
+
+        data = payload.model_dump(exclude_unset=True)
+        if "name" in data and data["name"]:
+            existing = SpecializationRepository.get_by_name(db, data["name"])
+            if existing and existing.id != specialization.id:
+                raise ValueError("Specialization already exists.")
+        if "specialization_code" in data and data["specialization_code"]:
+            existing_code = SpecializationRepository.get_by_code(
+                db, data["specialization_code"]
+            )
+            if existing_code and existing_code.id != specialization.id:
+                raise ValueError(
+                    f"Specialization code {data['specialization_code']} "
+                    "already exists."
+                )
+
+        for key, value in data.items():
+            setattr(specialization, key, value)
+        return SpecializationRepository.update(db, specialization)
+
+    @staticmethod
+    def delete_specialization(db: Session, specialization_id: int):
+        specialization = SpecializationRepository.get_by_id(
+            db, specialization_id
+        )
+        if not specialization:
+            raise ValueError("Specialization not found.")
+        SpecializationRepository.delete(db, specialization)
+
+    @staticmethod
+    async def import_specializations(
+        db: Session, file: UploadFile
+    ) -> MasterImportResponse:
+        rows = await read_tabular_rows(file)
+        created = updated = skipped = 0
+        errors: list[str] = []
+
+        for index, raw in enumerate(rows, start=2):
+            try:
+                data = map_specialization_row(raw)
+            except ValueError as exc:
+                errors.append(f"Row {index}: {exc}")
+                skipped += 1
+                continue
+
+            existing = SpecializationRepository.get_by_name(db, data["name"])
+            if existing:
+                for key, value in data.items():
+                    if key == "specialization_code" and not value:
+                        continue
+                    if value is not None:
+                        setattr(existing, key, value)
+                SpecializationRepository.update(db, existing)
+                updated += 1
+                continue
+
+            code = data["specialization_code"] or generate_next_code(
+                db, Specialization, "specialization_code", "SPC"
+            )
+            if SpecializationRepository.get_by_code(db, code):
+                errors.append(
+                    f"Row {index}: Specialization code {code} already exists."
+                )
+                skipped += 1
+                continue
+
+            SpecializationRepository.create(
+                db,
+                Specialization(
+                    specialization_code=code,
+                    name=data["name"],
+                    description=data.get("description"),
+                    is_active=data.get("is_active", True),
+                ),
+            )
+            created += 1
+
+        return MasterImportResponse(
+            created=created,
+            updated=updated,
+            skipped=skipped,
+            errors=errors,
+        )
 
     # --------------------------------------------------
     # Incentive slabs
