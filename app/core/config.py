@@ -21,6 +21,18 @@ class Settings(BaseSettings):
     # Public base URL for building absolute document/receipt links in Sheets
     APP_BASE_URL: str = Field(default="http://localhost:8000")
 
+    # File storage: "local" (disk + /uploads) or "s3" (S3/R2)
+    STORAGE_BACKEND: str = Field(default="local")
+    S3_BUCKET: str | None = Field(default=None)
+    S3_REGION: str = Field(default="auto")
+    S3_ENDPOINT_URL: str | None = Field(default=None)
+    S3_ACCESS_KEY_ID: str | None = Field(default=None)
+    S3_SECRET_ACCESS_KEY: str | None = Field(default=None)
+    S3_PUBLIC_BASE_URL: str | None = Field(
+        default=None,
+        description="Public HTTPS base for object URLs, e.g. https://files.example.com",
+    )
+
     # Google Sheets
     GOOGLE_SHEETS_ENABLED: bool = Field(default=False)
     GOOGLE_SHEETS_SPREADSHEET_ID: str | None = Field(default=None)

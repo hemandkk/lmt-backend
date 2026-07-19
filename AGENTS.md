@@ -64,7 +64,7 @@ All routes are mounted under `/api/v1` (except payment_router which mounts direc
 - **TimestampMixin**: All models inherit from it — `created_at` and `updated_at` are server-managed (PostgreSQL `now()`).
 - **Multipart forms**: The prospects endpoint accepts both `application/json` and `multipart/form-data`. The multipart path has its own parsing logic (`_parse_multipart_lead`) supporting flat fields, `payload` JSON strings, and `documents[]`/`docTypes[]` paired arrays.
 - **Google Sheets sync**: Optional (controlled by `GOOGLE_SHEETS_ENABLED` in `.env`). Leads are auto-synced to a Google Sheet on create/update. See `.env.google-sheets.example` for required env vars. Credentials go in `app/credentials/`.
-- **File uploads**: Stored under `app/uploads/`. URLs served via `StaticFiles` mount at `/uploads`. `APP_BASE_URL` env var controls absolute URL generation in exports/sheets.
+- **File uploads**: `FileStorage` supports `STORAGE_BACKEND=local` (`app/uploads/` + `/uploads` mount) or `s3` (S3/Cloudflare R2). Deletes/replaces also remove the object from storage. With `s3`, DB stores absolute public URLs (`S3_PUBLIC_BASE_URL`). `APP_BASE_URL` still prefixes relative `/uploads/...` links in exports/sheets.
 
 ## Environment
 
