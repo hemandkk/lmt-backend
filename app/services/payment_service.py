@@ -228,7 +228,16 @@ class PaymentService:
             by_type=PaymentTypeBreakdown(
                 advance=by_type.get("advance", Decimal("0")),
                 installment=by_type.get("installment", Decimal("0")),
-                full=by_type.get("full", Decimal("0")),
+                full_payment=by_type.get("full_payment", Decimal("0")),
+                registration_fee=by_type.get(
+                    "registration_fee", Decimal("0")
+                ),
+                before_exam_fee=by_type.get(
+                    "before_exam_fee", Decimal("0")
+                ),
+                after_result_fee=by_type.get(
+                    "after_result_fee", Decimal("0")
+                ),
             ),
             by_status=PaymentStatusBreakdown(
                 completed=by_status.get("completed", Decimal("0")),

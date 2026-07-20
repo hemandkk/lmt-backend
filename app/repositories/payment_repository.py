@@ -139,7 +139,10 @@ class PaymentRepository:
         by_type = {
             PaymentType.advance.value: Decimal("0"),
             PaymentType.installment.value: Decimal("0"),
-            PaymentType.full.value: Decimal("0"),
+            PaymentType.full_payment.value: Decimal("0"),
+            PaymentType.registration_fee.value: Decimal("0"),
+            PaymentType.before_exam_fee.value: Decimal("0"),
+            PaymentType.after_result_fee.value: Decimal("0"),
         }
         by_status = {
             PaymentStatus.completed.value: Decimal("0"),

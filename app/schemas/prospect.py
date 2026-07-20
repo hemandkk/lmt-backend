@@ -63,11 +63,10 @@ class LeadPaymentInput(BaseModel):
 
     @field_validator("payment_type", mode="before")
     @classmethod
-    def map_final_to_full(cls, value: Any) -> Any:
-        # Frontend uses "final"; DB enum uses "full"
-        if isinstance(value, str) and value.lower() == "final":
-            return PaymentType.full
-        return value
+    def map_payment_type_aliases(cls, value: Any) -> Any:
+        from app.schemas.payment import coerce_payment_type
+
+        return coerce_payment_type(value)
 
 
 class PaymentResponse(BaseModel):

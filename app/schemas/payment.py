@@ -27,6 +27,31 @@ def _alias_config() -> ConfigDict:
     )
 
 
+def coerce_payment_type(value: Any) -> Any:
+    """Accept legacy / display aliases for PaymentType."""
+    if isinstance(value, PaymentType) or not isinstance(value, str):
+        return value
+    raw = value.strip()
+    snake = raw.replace("-", "_").replace(" ", "_").lower()
+    aliases = {
+        "final": PaymentType.full_payment,
+        "full": PaymentType.full_payment,
+        "full_payment": PaymentType.full_payment,
+        "registration_fee": PaymentType.registration_fee,
+        "registrationfee": PaymentType.registration_fee,
+        "before_exam_fee": PaymentType.before_exam_fee,
+        "beforeexamfee": PaymentType.before_exam_fee,
+        "after_result_fee": PaymentType.after_result_fee,
+        "afterresultfee": PaymentType.after_result_fee,
+    }
+    compact = snake.replace("_", "")
+    if snake in aliases:
+        return aliases[snake]
+    if compact in aliases:
+        return aliases[compact]
+    return value
+
+
 # -----------------------------
 # Base Schema
 # -----------------------------
@@ -67,10 +92,8 @@ class PaymentBase(BaseModel):
 
     @field_validator("payment_type", mode="before")
     @classmethod
-    def map_final_to_full(cls, value):
-        if isinstance(value, str) and value.lower() == "final":
-            return PaymentType.full
-        return value
+    def map_payment_type_aliases(cls, value):
+        return coerce_payment_type(value)
 
 
 # -----------------------------
@@ -122,10 +145,8 @@ class PaymentUpdate(BaseModel):
 
     @field_validator("payment_type", mode="before")
     @classmethod
-    def map_final_to_full(cls, value):
-        if isinstance(value, str) and value.lower() == "final":
-            return PaymentType.full
-        return value
+    def map_payment_type_aliases(cls, value):
+        return coerce_payment_type(value)
 
 
 # -----------------------------
@@ -248,7 +269,18 @@ class PaymentTypeBreakdown(BaseModel):
 
     advance: Decimal = Decimal("0")
     installment: Decimal = Decimal("0")
-    full: Decimal = Decimal("0")
+    full_payment: Decimal = Field(
+        default=Decimal("0"), serialization_alias="fullPayment"
+    )
+    registration_fee: Decimal = Field(
+        default=Decimal("0"), serialization_alias="registrationFee"
+    )
+    before_exam_fee: Decimal = Field(
+        default=Decimal("0"), serialization_alias="beforeExamFee"
+    )
+    after_result_fee: Decimal = Field(
+        default=Decimal("0"), serialization_alias="afterResultFee"
+    )
 
 
 class PaymentStatusBreakdown(BaseModel):

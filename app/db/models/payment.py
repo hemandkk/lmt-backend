@@ -14,7 +14,10 @@ from app.db.mixins import TimestampMixin
 class PaymentType(str, enum.Enum):
     advance = "advance"
     installment = "installment"
-    full = "full"
+    full_payment = "full_payment"
+    registration_fee = "registration_fee"
+    before_exam_fee = "before_exam_fee"
+    after_result_fee = "after_result_fee"
 
 
 class PaymentStatus(str, enum.Enum):
