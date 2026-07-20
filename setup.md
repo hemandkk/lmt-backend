@@ -365,3 +365,19 @@ Upload a document on a lead
 Open the fileUrl from the API — it should be
 https://your-public-base/.../file.pdf and open in the browser
 If upload works but the link 404s, public access / S3_PUBLIC_BASE_URL is wrong. If upload fails with auth errors, check Access Key + Endpoint + Bucket name.
+
+
+
+# Docker 
+    Production on Render
+    Dockerfile path
+
+    docker/Dockerfile
+
+    Build Command
+
+    docker build -f docker/Dockerfile -t lmt-backend .
+
+    Start Command
+
+    uvicorn main:app --host 0.0.0.0 --port $PORT
