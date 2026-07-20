@@ -184,14 +184,16 @@ def _maybe_parse_json_value(value: Any) -> Any:
 
 def _extract_document_files(
     form_files: list[tuple[str, Any]],
-) -> dict[str, Any]:
+) -> list[tuple[str, Any]]:
     """
-    Accepts:
+    Accepts multiple files per type:
       document_aadhaar, document_photo, ...
       documents[aadhaar], doc_aadhaar
       or field name equal to doc type
+
+    Returns ordered (doc_type, upload) pairs — same type may appear more than once.
     """
-    mapping: dict[str, Any] = {}
+    pairs: list[tuple[str, Any]] = []
     for field_name, upload in form_files:
         if not _is_upload(upload) or not upload.filename:
             continue
@@ -204,8 +206,8 @@ def _extract_document_files(
         if key is None and name in DOC_TYPES:
             key = name
         if key and key in DOC_TYPES:
-            mapping[key] = upload
-    return mapping
+            pairs.append((key, upload))
+    return pairs
 
 
 def _extract_receipt_files(
@@ -232,12 +234,13 @@ def _extract_receipt_files(
     return mapping
 
 
-def _pair_documents_with_doctypes(form) -> dict[str, Any]:
+def _pair_documents_with_doctypes(form) -> list[tuple[str, Any]]:
     """
-    Frontend pattern:
+    Frontend pattern (multiple files per type allowed):
       documents: <file>, docTypes: aadhaar
-      documents: <file>, docTypes: photo
-    (or all documents then all docTypes — paired by index)
+      documents: <file>, docTypes: aadhaar
+      documents: <file>, docTypes: degree
+    Paired by index — same docType may repeat.
     """
     document_files: list[Any] = []
     doc_types: list[str] = []
@@ -263,14 +266,14 @@ def _pair_documents_with_doctypes(form) -> dict[str, Any]:
                 if text:
                     doc_types.append(text)
 
-    mapping: dict[str, Any] = {}
+    pairs: list[tuple[str, Any]] = []
     for index, upload in enumerate(document_files):
         if index >= len(doc_types):
             break
         doc_type = doc_types[index]
         if doc_type in DOC_TYPES:
-            mapping[doc_type] = upload
-    return mapping
+            pairs.append((doc_type, upload))
+    return pairs
 
 
 def _build_lead_from_flat_form(form, model_cls):
@@ -333,8 +336,8 @@ def _parse_multipart_lead(form, model_cls):
     ]
 
     document_files = _extract_document_files(uploads)
-    # Merge frontend documents[] + docTypes[] pairing
-    document_files.update(_pair_documents_with_doctypes(form))
+    # Merge frontend documents[] + docTypes[] pairing (multi-file per type)
+    document_files.extend(_pair_documents_with_doctypes(form))
     receipt_files = _extract_receipt_files(uploads)
 
     return payload, document_files, receipt_files
@@ -773,7 +776,7 @@ async def upload_lead_document(
             prospect_id,
             ProspectUpdate(documents=[]),
             actor_id=current_user.id,
-            document_files={doc_type.value: file},
+            document_files=[(doc_type.value, file)],
         )
     except ValueError as ex:
         raise HTTPException(status_code=404, detail=str(ex))

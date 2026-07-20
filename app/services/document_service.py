@@ -59,28 +59,8 @@ class DocumentService:
         if not prospect:
             raise ValueError("Prospect not found.")
 
-        existing = DocumentRepository.get_by_prospect_and_type(
-            db, prospect.id, document_type
-        )
-
-        if existing:
-            file_url, stored_filename, file_size = FileStorage.replace_file(
-                old_file=existing.file_url,
-                upload_file=file,
-                folder=f"prospects/{prospect.prospect_id}",
-                filename=existing.document_id,
-            )
-            existing.original_filename = file.filename or existing.original_filename
-            existing.stored_filename = stored_filename
-            existing.file_url = file_url
-            existing.mime_type = file.content_type
-            existing.file_size = file_size
-            if remarks is not None:
-                existing.remarks = remarks
-            updated = DocumentRepository.update(db, existing)
-            DocumentService._sync_sheets(db, prospect_id)
-            return updated
-
+        # Always create a new row so multiple files per type are supported
+        # (e.g. aadhaar front+back, degree marks+provisional).
         document_code = DocumentService._next_document_code(db)
 
         file_url, stored_filename, file_size = FileStorage.save_file(

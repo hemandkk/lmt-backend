@@ -191,7 +191,11 @@ class ExportService:
                     if hasattr(doc.document_type, "value")
                     else str(doc.document_type)
                 )
-                docs_by_type[dtype] = ExportService._absolute_file_url(doc.file_url)
+                url = ExportService._absolute_file_url(doc.file_url)
+                if dtype in docs_by_type and docs_by_type[dtype]:
+                    docs_by_type[dtype] = f"{docs_by_type[dtype]}\n{url}"
+                else:
+                    docs_by_type[dtype] = url
 
             assigned_name = ""
             assigned_code = ""

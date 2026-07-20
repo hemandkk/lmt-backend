@@ -183,7 +183,11 @@ class GoogleSheetsService:
                     continue
             header = DOC_COLUMN_MAP.get(doc_type)
             if header:
-                urls[header] = GoogleSheetsService._absolute_url(doc.file_url)
+                url = GoogleSheetsService._absolute_url(doc.file_url)
+                if urls[header]:
+                    urls[header] = f"{urls[header]}\n{url}"
+                else:
+                    urls[header] = url
         return urls
 
     @staticmethod

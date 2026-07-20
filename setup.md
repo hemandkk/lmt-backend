@@ -381,3 +381,11 @@ If upload works but the link 404s, public access / S3_PUBLIC_BASE_URL is wrong. 
     Start Command
 
     uvicorn main:app --host 0.0.0.0 --port $PORT
+
+# Enum change 
+    SELECT *
+    FROM pg_enum
+    JOIN pg_type ON pg_enum.enumtypid = pg_type.oid
+
+    ALTER TYPE paymenttype
+    ADD VALUE IF NOT EXISTS 'registration_fee';

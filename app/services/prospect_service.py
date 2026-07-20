@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from math import ceil
 from typing import Any, Optional
 from uuid import uuid4
@@ -188,61 +190,30 @@ class ProspectService:
         db: Session,
         prospect: Prospect,
         documents_meta: list[LeadDocumentInput],
-        document_files: dict[str, UploadFile],
+        document_files: list[tuple[str, UploadFile]],
     ) -> None:
         """
-        document_files keys: doc type value e.g. "aadhaar", "photo".
+        document_files: ordered (doc_type, upload) pairs.
+        Multiple files of the same type are each stored as separate rows.
         """
-        existing_by_type = {
-            (
-                d.document_type.value
-                if hasattr(d.document_type, "value")
-                else str(d.document_type)
-            ): d
-            for d in (prospect.documents or [])
-        }
+        # Optional metadata is currently unused for matching; uploads always create.
+        _ = documents_meta
 
-        for meta in documents_meta or []:
-            doc_type = meta.doc_type
-            key = doc_type.value if hasattr(doc_type, "value") else str(doc_type)
-            upload = document_files.get(key)
-
-            if not upload or not upload.filename:
-                # Keep existing document referenced by existingUrl / id
-                continue
-
-            existing = existing_by_type.get(key)
-            saved = ProspectService._save_document(
-                db,
-                prospect,
-                doc_type,
-                upload,
-                existing=existing,
-            )
-            if existing is None:
-                prospect.documents.append(saved)
-                existing_by_type[key] = saved
-
-        # Files sent without metadata entry still upload
-        for key, upload in document_files.items():
-            if not upload or not upload.filename:
-                continue
-            if any(
-                (m.doc_type.value if hasattr(m.doc_type, "value") else str(m.doc_type))
-                == key
-                for m in (documents_meta or [])
-            ):
+        for key, upload in document_files or []:
+            if not upload or not getattr(upload, "filename", None):
                 continue
             try:
                 doc_type = DocumentType(key)
             except ValueError:
                 continue
-            existing = existing_by_type.get(key)
             saved = ProspectService._save_document(
-                db, prospect, doc_type, upload, existing=existing
+                db,
+                prospect,
+                doc_type,
+                upload,
+                existing=None,
             )
-            if existing is None:
-                prospect.documents.append(saved)
+            prospect.documents.append(saved)
 
     @staticmethod
     def _sync_payments(
@@ -310,7 +281,7 @@ class ProspectService:
         db: Session,
         payload: ProspectCreate,
         actor_id: Optional[int] = None,
-        document_files: Optional[dict[str, UploadFile]] = None,
+        document_files: Optional[list[tuple[str, UploadFile]]] = None,
         receipt_files: Optional[dict[int, UploadFile]] = None,
     ) -> Prospect:
         if payload.email:
@@ -373,7 +344,7 @@ class ProspectService:
                 db,
                 created,
                 payload.documents or [],
-                document_files or {},
+                document_files or [],
             )
             created = ProspectRepository.update(db, created)
 
@@ -459,7 +430,7 @@ class ProspectService:
         prospect_id: int,
         payload: ProspectUpdate,
         actor_id: Optional[int] = None,
-        document_files: Optional[dict[str, UploadFile]] = None,
+        document_files: Optional[list[tuple[str, UploadFile]]] = None,
         receipt_files: Optional[dict[int, UploadFile]] = None,
     ):
         prospect = ProspectRepository.get_by_id(db, prospect_id)
@@ -501,7 +472,7 @@ class ProspectService:
                 db,
                 prospect,
                 payload.documents or [],
-                document_files or {},
+                document_files or [],
             )
 
         apply_admission_stage_autos(prospect)
