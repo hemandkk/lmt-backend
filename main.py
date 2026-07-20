@@ -19,6 +19,8 @@ from app.db.models.payment import Payment
 from app.db.models.prospect import Prospect
 from app.db.models.prospect_document import ProspectDocument
 from app.db.models.user import User, UserRole
+from app.core.config import settings
+
 from app.db.session import SessionLocal, engine
 from app.repositories.settings_repository import (
     FALLBACK_DEFAULT_TARGET,
@@ -349,8 +351,14 @@ app = FastAPI(
     version="1.0.0"
 )
 
-origins = [
+""" origins = [
     "http://localhost:3000",
+     "https://crm-lm-frontend-9tny06osm-testercrm94-8474s-projects.vercel.app",
+] """
+origins = [
+    origin.strip()
+    for origin in settings.CORS_ORIGINS.split(",")
+    if origin.strip()
 ]
 
 app.add_middleware(

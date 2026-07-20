@@ -17,6 +17,9 @@ class Settings(BaseSettings):
     )
     DATABASE_URL: str
     UPLOAD_DIR: str = "app/uploads"
+    
+    CORS_ORIGINS: str = ""
+
 
     # Public base URL for building absolute document/receipt links in Sheets
     APP_BASE_URL: str = Field(default="http://localhost:8000")
