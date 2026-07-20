@@ -383,12 +383,16 @@ class TeamService:
             employee_id=employee_id,
             supervisor_id=supervisor_id,
         )
+        items=[]
         total_revenue = Decimal("0")
         total_admissions = 0
         leads_converted = 0
         monthly_map: dict[tuple[int, int], dict] = {}
 
         for eid in ids:
+            user = UserRepository.get_by_id(db, eid)
+            if not user:
+                continue
             rows = AnalyticsRepository.employee_performance(
                 db,
                 date_from=date_from,
@@ -400,6 +404,16 @@ class TeamService:
                 leads_converted += int(rows[0].get("leads_converted") or 0)
                 total_revenue += TeamService._as_decimal(rows[0].get("revenue"))
 
+            items.append(
+                {
+                    "employee_id": eid,
+                    "employee_code": user.employee_id,
+                    "employee_name": user.name,
+                    "total_admissions": total_admissions,
+                    "leads_converted": leads_converted,
+                    "total_revenue": total_revenue,
+                }
+            )
             for m in AnalyticsRepository.monthly_sales(
                 db,
                 employee_id=eid,
@@ -451,6 +465,7 @@ class TeamService:
             "leads_converted": leads_converted,
             "conversion_rate": rate,
             "monthly": monthly,
+            "items": items,
             "employee_id": employee_id,
             "supervisor_id": supervisor_id,
         }

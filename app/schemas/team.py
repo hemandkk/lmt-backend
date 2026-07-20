@@ -74,6 +74,20 @@ class TeamSupervisorListResponse(BaseModel):
     total: int
 
 
+class TeamSalesItem(BaseModel):
+    model_config = _alias_config()
+
+    employee_id: int = Field(serialization_alias="employeeId")
+    employee_code: Optional[str] = Field(
+        default=None, serialization_alias="employeeCode"
+    )
+    employee_name: Optional[str] = Field(
+        default=None, serialization_alias="employeeName"
+    )
+    total_admissions: int = Field(serialization_alias="totalAdmissions")
+    leads_converted: int = Field(serialization_alias="leadsConverted")
+    total_revenue: int = Field(serialization_alias="totalRevenue")
+
 class TeamSalesResponse(BaseModel):
     model_config = _alias_config()
 
@@ -82,6 +96,7 @@ class TeamSalesResponse(BaseModel):
     leads_converted: int = Field(serialization_alias="leadsConverted")
     conversion_rate: float = Field(serialization_alias="conversionRate")
     monthly: list[dict[str, Any]] = []
+    items: list[TeamSalesItem]
     employee_id: Optional[int] = Field(
         default=None, serialization_alias="employeeId"
     )
