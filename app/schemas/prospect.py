@@ -367,8 +367,6 @@ class ProspectResponse(BaseModel):
     name: str
     email: Optional[str] = None
     phone: Optional[str] = None
-    password: Optional[str] = None
-
     father_name: Optional[str] = Field(
         default=None, serialization_alias="fatherName"
     )

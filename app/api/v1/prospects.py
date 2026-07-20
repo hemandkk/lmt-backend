@@ -385,7 +385,10 @@ def _parse_admission_stage_filters(
 
 
 @router.get("/utility/next-prospect-id")
-def get_next_prospect_id(db: Session = Depends(get_db)):
+def get_next_prospect_id(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
     try:
         prospect_id = generate_next_code(
             db=db,
@@ -398,7 +401,7 @@ def get_next_prospect_id(db: Session = Depends(get_db)):
     except Exception as ex:
         raise HTTPException(
             status_code=500,
-            detail=f"Failed to generate prospect id: {ex}",
+            detail="Failed to generate prospect id",
         ) from ex
 
 

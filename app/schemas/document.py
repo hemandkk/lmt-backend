@@ -53,8 +53,6 @@ class DocumentResponse(BaseModel):
 
     original_filename: str
 
-    stored_filename: str
-
     file_url: str
 
     mime_type: Optional[str]

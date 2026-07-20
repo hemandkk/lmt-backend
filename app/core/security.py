@@ -1,4 +1,5 @@
 from datetime import datetime, timedelta, timezone
+import uuid
 from jose import jwt
 from passlib.context import CryptContext
 
@@ -31,6 +32,7 @@ def create_access_token(data: dict):
 
     payload["type"] = "access"
     payload["iat"] = now
+    payload["jti"] = str(uuid.uuid4())
     payload["exp"] = now + timedelta(
         minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES
     )
@@ -48,6 +50,7 @@ def create_refresh_token(data: dict):
 
     payload["type"] = "refresh"
     payload["iat"] = now
+    payload["jti"] = str(uuid.uuid4())
     payload["exp"] = now + timedelta(
         days=settings.REFRESH_TOKEN_EXPIRE_DAYS
     )

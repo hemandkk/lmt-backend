@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 
 from app.core.id_generator import generate_next_code
 from app.db.session import get_db
+from app.dependencies.auth import get_current_user
 from app.dependencies.permissions import require_admin
 from app.db.models.user import User
 from app.schemas.employee import (
@@ -22,7 +23,10 @@ router = APIRouter(
 
 
 @router.get("/utility/next-employee-id")
-def get_next_prospect_id(db: Session = Depends(get_db)):
+def get_next_prospect_id(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
     try:
         employee_id = generate_next_code(
             db=db,
@@ -35,7 +39,7 @@ def get_next_prospect_id(db: Session = Depends(get_db)):
     except Exception as ex:
         raise HTTPException(
             status_code=500,
-            detail=f"Failed to generate employee id: {ex}",
+            detail="Failed to generate employee id",
         ) from ex
 
 

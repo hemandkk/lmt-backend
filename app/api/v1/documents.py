@@ -15,7 +15,7 @@ from app.db.models.prospect_document import DocumentType
 from app.db.models.user import User
 from app.db.session import get_db
 from app.dependencies.auth import get_current_user
-from app.dependencies.permissions import ensure_prospect_access
+from app.dependencies.permissions import ensure_prospect_access, deny_if_cannot_mutate_leads
 from app.repositories.document_repository import DocumentRepository
 from app.schemas.document import (
     DocumentListResponse,
@@ -43,6 +43,7 @@ def upload_document(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
+    deny_if_cannot_mutate_leads(current_user)
     ensure_prospect_access(db, prospect_id, current_user)
     try:
         return DocumentService.upload_document(
@@ -91,6 +92,7 @@ def update_document(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
+    deny_if_cannot_mutate_leads(current_user)
     try:
         document = DocumentService.get_document(db, document_id)
         ensure_prospect_access(db, document.prospect_id, current_user)
@@ -105,6 +107,7 @@ def delete_document(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
+    deny_if_cannot_mutate_leads(current_user)
     try:
         document = DocumentService.get_document(db, document_id)
         ensure_prospect_access(db, document.prospect_id, current_user)

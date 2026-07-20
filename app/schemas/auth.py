@@ -42,3 +42,9 @@ class AuthResponse(BaseModel):
     refresh_token: str
     token_type: str
     user: UserResponse
+
+
+class ChangePasswordRequest(BaseModel):
+    current_password: str = Field(alias="currentPassword")
+    new_password: str = Field(..., min_length=8, alias="newPassword")
+    model_config = ConfigDict(populate_by_name=True)

@@ -14,6 +14,16 @@ from app.core.config import settings
 
 logger = logging.getLogger(__name__)
 
+# Allowed file extensions for uploads
+ALLOWED_EXTENSIONS = {
+    ".pdf", ".jpg", ".jpeg", ".png", ".gif", ".bmp",
+    ".doc", ".docx", ".xls", ".xlsx", ".ppt", ".pptx",
+    ".txt", ".csv",
+}
+
+# Maximum file size: 10MB
+MAX_FILE_SIZE = 10 * 1024 * 1024
+
 
 class FileStorage:
     BASE_UPLOAD_DIR = Path("app/uploads")
@@ -116,8 +126,43 @@ class FileStorage:
         else:
             file_path = Path(file_url)
 
+        # Security: ensure resolved path stays within upload directory
+        try:
+            resolved = file_path.resolve()
+            base_resolved = cls.BASE_UPLOAD_DIR.resolve()
+            if not str(resolved).startswith(str(base_resolved)):
+                logger.warning(
+                    "Attempted path traversal in file deletion: %s", file_url
+                )
+                return
+        except (OSError, ValueError):
+            return
+
         if file_path.exists() and file_path.is_file():
             file_path.unlink()
+
+    @classmethod
+    def _validate_upload(cls, upload_file: UploadFile) -> None:
+        """Validate file extension and size before saving."""
+        # Check file extension
+        extension = Path(upload_file.filename or "").suffix.lower()
+        if extension not in ALLOWED_EXTENSIONS:
+            raise ValueError(
+                f"File type '{extension}' is not allowed. "
+                f"Allowed types: {', '.join(sorted(ALLOWED_EXTENSIONS))}"
+            )
+
+        # Check file size by reading and checking
+        upload_file.file.seek(0, 2)  # Seek to end
+        file_size = upload_file.file.tell()
+        upload_file.file.seek(0)  # Seek back to start
+
+        if file_size > MAX_FILE_SIZE:
+            max_mb = MAX_FILE_SIZE // (1024 * 1024)
+            raise ValueError(
+                f"File size ({file_size // (1024 * 1024)}MB) exceeds "
+                f"maximum allowed size ({max_mb}MB)."
+            )
 
     @classmethod
     def save_file(
@@ -131,6 +176,8 @@ class FileStorage:
         Local: served via StaticFiles at /uploads.
         S3/R2: absolute public URL under S3_PUBLIC_BASE_URL.
         """
+        cls._validate_upload(upload_file)
+
         extension = Path(upload_file.filename or "").suffix
         stored_filename = f"{filename}{extension}"
         key = cls._object_key(folder, stored_filename)

@@ -1,8 +1,11 @@
 from pathlib import Path
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
+from slowapi import Limiter
+from slowapi.errors import RateLimitExceeded
+from slowapi.util import get_remote_address
 from sqlalchemy import inspect, text
 
 from app.api.v1.api import api_router
@@ -351,6 +354,20 @@ app = FastAPI(
     version="1.0.0"
 )
 
+# Rate limiting setup
+limiter = Limiter(key_func=get_remote_address)
+app.state.limiter = limiter
+
+
+@app.exception_handler(RateLimitExceeded)
+async def rate_limit_handler(request: Request, exc: RateLimitExceeded):
+    from fastapi.responses import JSONResponse
+    return JSONResponse(
+        status_code=429,
+        content={"detail": "Rate limit exceeded. Please try again later."},
+    )
+
+
 """ origins = [
     "http://localhost:3000",
      "https://crm-lm-frontend-9tny06osm-testercrm94-8474s-projects.vercel.app",
@@ -365,9 +382,19 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=origins,
     allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_methods=["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allow_headers=["Authorization", "Content-Type"],
 )
+
+
+@app.middleware("http")
+async def add_security_headers(request: Request, call_next):
+    response = await call_next(request)
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["X-XSS-Protection"] = "1; mode=block"
+    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    return response
 
 app.include_router(
     api_router,
@@ -379,26 +406,33 @@ app.include_router(payment_router)
 
 @app.on_event("startup")
 def seed_default_admin_user():
+    import secrets
+    import string
+
     db = SessionLocal()
     try:
         user = db.query(User).filter(User.email == "admin@example.com").first()
         if user is None:
+            # Generate a random password for the initial admin account
+            alphabet = string.ascii_letters + string.digits + string.punctuation
+            temp_password = "".join(secrets.choice(alphabet) for _ in range(16))
             user = User(
                 email="admin@example.com",
                 employee_id="ADM001",
                 name="Admin User",
-                password_hash=hash_password("asdf1234"),
+                password_hash=hash_password(temp_password),
                 role=UserRole.admin,
                 is_active=True,
             )
             db.add(user)
+            db.commit()
+            print(f"[STARTUP] Admin user created. Temporary password: {temp_password}")
+            print("[STARTUP] IMPORTANT: Change this password after first login!")
         else:
-            # Keep existing password — do not reset on every restart
-            user.employee_id = "ADM001"
-            user.name = "Admin User"
-            user.role = UserRole.admin
-            user.is_active = True
-        db.commit()
+            # Only ensure the admin account is active; do NOT force-reset password or role
+            if not user.is_active:
+                user.is_active = True
+                db.commit()
     finally:
         db.close()
 

@@ -18,7 +18,7 @@ class EmployeeCreate(BaseModel):
 
     name: str = Field(..., min_length=1)
     email: EmailStr
-    password: str = Field(..., min_length=6)
+    password: str = Field(..., min_length=8)
     phone: Optional[str] = None
     department: Optional[str] = None
     designation: Optional[str] = None
