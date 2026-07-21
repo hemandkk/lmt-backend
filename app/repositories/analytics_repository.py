@@ -309,6 +309,30 @@ class AnalyticsRepository:
         return [{"stage": (r[0].value if hasattr(r[0], "value") else str(r[0])), "count": r[1]} for r in rows]
 
     @staticmethod
+    def leads_by_admission_stage(
+        db: Session,
+        employee_id: Optional[int] = None,
+        date_from: Optional[date] = None,
+        date_to: Optional[date] = None,
+        source: Optional[str] = None,
+    ) -> list[dict]:
+        query = db.query(Prospect.admission_stage, func.count(Prospect.id))
+
+        if employee_id is not None:
+            query = query.filter(Prospect.assigned_to_id == employee_id)
+        if source:
+            query = query.filter(Prospect.source == source)
+
+        start_dt, end_dt = datetime_range_bounds(date_from, date_to)
+        if start_dt:
+            query = query.filter(Prospect.created_at >= start_dt)
+        if end_dt:
+            query = query.filter(Prospect.created_at <= end_dt)
+
+        rows = query.group_by(Prospect.admission_stage).all()
+        return [{"admission_stage": (r[0].value if hasattr(r[0], "value") else str(r[0])), "count": r[1]} for r in rows]
+    
+    @staticmethod
     def employee_performance(
         db: Session,
         date_from: Optional[date] = None,

@@ -14,6 +14,7 @@ from app.schemas.dashboard import (
     EmployeeReportResponse,
     IncentiveReportResponse,
     LeadsByStageReportResponse,
+    LeadsByAdminStageReportResponse,
     RevenueReportResponse,
 )
 from app.services.dashboard_service import ReportService
@@ -169,6 +170,26 @@ def leads_by_stage_report(
         source=source,
     )
 
+@router.get(
+    "/leads-by-admission-stage",
+    response_model=LeadsByAdminStageReportResponse,
+)
+def leads_by_admission_stage_report(
+    date_from: Optional[date] = Query(None, alias="dateFrom"),
+    date_to: Optional[date] = Query(None, alias="dateTo"),
+    employee_id: Optional[int] = Query(None, alias="employeeId"),
+    source: Optional[str] = None,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin),
+):
+    """Admin leads grouped by pipeline stage."""
+    return ReportService.leads_by_admission_stage_report(
+        db,
+        date_from=date_from,
+        date_to=date_to,
+        employee_id=employee_id,
+        source=source,
+    )
 
 @router.get("/incentives", response_model=IncentiveReportResponse)
 def incentives_report(

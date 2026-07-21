@@ -21,6 +21,7 @@ from app.schemas.dashboard import (
     LeadCountSummary,
     LeadSourceItem,
     LeadsByStageReportResponse,
+    LeadsByAdminStageReportResponse,
     MonthlySalesItem,
     PaymentCollectedSummary,
     PaymentStatusSummary,
@@ -29,6 +30,7 @@ from app.schemas.dashboard import (
     SalesByEmployeeItem,
     SalesByMonthItem,
     StageCountItem,
+    AdmissionStageCountItem,
     WinLossItem,
 )
 
@@ -61,6 +63,13 @@ def _metrics_for_scope(
         date_from=date_from,
         date_to=date_to,
     )
+    admission_stages = AnalyticsRepository.leads_by_admission_stage(
+        db,
+        employee_id=employee_id,
+        date_from=date_from,
+        date_to=date_to,
+    )
+
     exam = AnalyticsRepository.exam_stats(db, employee_id=employee_id)
     # Targets / incentives are lead-count based (leads = sales)
     month_leads = lead_counts["this_month"]
@@ -80,6 +89,7 @@ def _metrics_for_scope(
         "payment_status": PaymentStatusSummary(**payment_status),
         "payment_collected": PaymentCollectedSummary(**payment_collected),
         "leads_by_stage": [StageCountItem(**s) for s in stages],
+        "leads_by_admission_stage": [AdmissionStageCountItem(**s) for s in admission_stages],
         "target_achieved": target["target_achieved"],
         "monthly_target": target["monthly_target"],
         "target_status": target["target_status"],
@@ -633,6 +643,27 @@ class ReportService:
         )
         items = [StageCountItem(**s) for s in stages]
         return LeadsByStageReportResponse(
+            items=items,
+            total=sum(i.count for i in items),
+        )
+    @staticmethod
+    def leads_by_admission_stage_report(
+        db: Session,
+        date_from: Optional[date] = None,
+        date_to: Optional[date] = None,
+        employee_id: Optional[int] = None,
+        source: Optional[str] = None,
+    ) -> LeadsByAdminStageReportResponse:
+        admission_stage = AnalyticsRepository.leads_by_admission_stage(
+            db,
+            employee_id=employee_id,
+            date_from=date_from,
+            date_to=date_to,
+            source=source,
+        )
+        print("ADMIN_STAGE", admission_stage)
+        items = [AdmissionStageCountItem(**s) for s in admission_stage]
+        return LeadsByAdminStageReportResponse(
             items=items,
             total=sum(i.count for i in items),
         )

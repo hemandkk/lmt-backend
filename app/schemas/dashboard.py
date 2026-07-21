@@ -52,6 +52,12 @@ class StageCountItem(BaseModel):
     stage: str
     count: int
 
+class AdmissionStageCountItem(BaseModel):
+    model_config = _alias_config()
+
+    admission_stage: str
+    count: int
+
 
 class ExamStatsSummary(BaseModel):
     model_config = _alias_config()
@@ -94,6 +100,10 @@ class DashboardMetricsMixin(BaseModel):
     leads_by_stage: list[StageCountItem] = Field(
         default_factory=list,
         serialization_alias="leadsByStage",
+    )
+    leads_by_admission_stage: list[AdmissionStageCountItem] = Field(
+        default_factory=list,
+        serialization_alias="leadsByAdmissionStage",
     )
     target_achieved: Decimal = Field(
         default=Decimal("0"), serialization_alias="targetAchieved"
@@ -338,6 +348,12 @@ class LeadsByStageReportResponse(BaseModel):
     model_config = _alias_config()
 
     items: list[StageCountItem] = Field(default_factory=list)
+    total: int = 0
+
+class LeadsByAdminStageReportResponse(BaseModel):
+    model_config = _alias_config()
+
+    items: list[AdmissionStageCountItem] = Field(default_factory=list)
     total: int = 0
 
 
