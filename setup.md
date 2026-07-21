@@ -389,3 +389,15 @@ If upload works but the link 404s, public access / S3_PUBLIC_BASE_URL is wrong. 
 
     ALTER TYPE paymenttype
     ADD VALUE IF NOT EXISTS 'registration_fee';
+
+
+# sequence-reset logic
+Automatically reset after importing/restoring data
+If you're restoring a database dump or manually inserting IDs during development, run:
+
+SELECT setval(
+    pg_get_serial_sequence('users', 'id'),
+    COALESCE(MAX(id), 1),
+    true
+)
+FROM users;

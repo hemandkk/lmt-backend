@@ -7,6 +7,7 @@ from app.core.id_generator import generate_next_code
 from app.db.session import get_db
 from app.dependencies.permissions import require_admin
 from app.db.models.user import User
+from app.schemas.auth import ResetPasswordRequest
 from app.schemas.employee import (
     EmployeeCreate,
     EmployeeListResponse,
@@ -137,6 +138,20 @@ def update_employee(
     except ValueError as ex:
         code = 404 if "not found" in str(ex).lower() else 400
         raise HTTPException(status_code=code, detail=str(ex)) from ex
+
+
+@router.post("/{employee_id}/reset-password")
+def reset_employee_password(
+    employee_id: int,
+    payload: ResetPasswordRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin),
+):
+    try:
+        EmployeeService.reset_password(db, employee_id, payload.newPassword)
+    except ValueError as ex:
+        raise HTTPException(status_code=404, detail=str(ex)) from ex
+    return {"message": "Password reset successfully."}
 
 
 @router.delete("/{employee_id}", status_code=status.HTTP_204_NO_CONTENT)

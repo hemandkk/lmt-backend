@@ -41,6 +41,7 @@ from app.dependencies.permissions import (
     deny_if_cannot_mutate_leads,
     require_admin,
 )
+from app.schemas.auth import ResetPasswordRequest
 from app.schemas.prospect import (
     ProspectCreate,
     ProspectListResponse,
@@ -637,6 +638,20 @@ async def update_prospect(
         ) from ex
     except ValueError as ex:
         raise HTTPException(status_code=404, detail=str(ex))
+
+
+@router.post("/{prospect_id}/reset-password")
+def reset_prospect_password(
+    prospect_id: int,
+    payload: ResetPasswordRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin),
+):
+    try:
+        ProspectService.reset_password(db, prospect_id, payload.newPassword)
+    except ValueError as ex:
+        raise HTTPException(status_code=404, detail=str(ex)) from ex
+    return {"message": "Password reset successfully."}
 
 
 @router.get(

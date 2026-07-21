@@ -37,6 +37,10 @@ class UserResponse(BaseModel):
     role: str
 
 
+class ResetPasswordRequest(BaseModel):
+    newPassword: str = Field(min_length=6)
+
+
 class AuthResponse(BaseModel):
     access_token: str
     refresh_token: str

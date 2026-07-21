@@ -17,7 +17,8 @@ from app.schemas.employee import (
 )
 from app.services.master_service import resolve_employee_monthly_target
 from app.services.notification_service import ActivityLogService
-
+from sqlalchemy.exc import IntegrityError
+from fastapi import HTTPException
 
 class EmployeeService:
 
@@ -241,8 +242,31 @@ class EmployeeService:
             reports_to_manager_id=manager_id,
             reports_to_sales_head_id=sales_head_id,
         )
-        db.add(user)
-        db.commit()
+
+        try:
+            db.add(user)
+            db.commit()
+
+        except IntegrityError as e:
+            db.rollback()
+
+            constraint = getattr(e.orig.diag, "constraint_name", "")
+            messages = {
+                "users_email_key": (409, "Email already exists."),
+                "users_employee_id_key": (409, "Employee ID already exists."),
+                "users_pkey": (
+                    500,
+                    "Internal database sequence error. Please contact the administrator.",
+                ),
+            }
+            if constraint in messages:
+                status, detail = messages[constraint]
+                raise HTTPException(status_code=status, detail=detail) from e
+
+            raise HTTPException(
+                status_code=500,
+                detail="Unable to create employee.",
+            ) from e
 
         ActivityLogService.log(
             db,
@@ -344,6 +368,14 @@ class EmployeeService:
 
         db.commit()
         return EmployeeService.get(db, user.id)
+
+    @staticmethod
+    def reset_password(db: Session, employee_id: int, new_password: str) -> None:
+        user = UserRepository.get_by_id(db, employee_id)
+        if not user or user.role not in ASSIGNABLE_ROLES:
+            raise ValueError("Employee not found.")
+        user.password_hash = hash_password(new_password)
+        db.commit()
 
     @staticmethod
     def deactivate(db: Session, employee_id: int) -> None:

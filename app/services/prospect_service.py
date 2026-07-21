@@ -708,6 +708,14 @@ class ProspectService:
         return ProspectRepository.get_by_id(db, prospect_id)
 
     @staticmethod
+    def reset_password(db: Session, prospect_id: int, new_password: str) -> None:
+        prospect = ProspectRepository.get_by_id(db, prospect_id)
+        if not prospect:
+            raise ValueError("Prospect not found.")
+        prospect.password = hash_password(new_password)
+        ProspectRepository.update(db, prospect)
+
+    @staticmethod
     def update_exam(
         db: Session,
         prospect_id: int,
