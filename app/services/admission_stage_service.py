@@ -13,12 +13,13 @@ ADMISSION_STAGE_ORDER = [
     AdmissionStage.registered,
     AdmissionStage.fifty_percent_paid,
     AdmissionStage.exam_attended,
-    AdmissionStage.waiting_for_100_percent_payment,
-    AdmissionStage.certificate_waiting,
     AdmissionStage.waiting_result,
+    AdmissionStage.result_announces,
+    AdmissionStage.waiting_for_100_percent_payment,
     AdmissionStage.result_announced,
-    AdmissionStage.completed,
+    AdmissionStage.certificate_waiting,
     AdmissionStage.delivered,
+    AdmissionStage.completed,
 ]
 
 _ALIASES = {
@@ -45,6 +46,8 @@ _ALIASES = {
     "waitingresult": AdmissionStage.waiting_result,
     "result_announced": AdmissionStage.result_announced,
     "resultannounced": AdmissionStage.result_announced,
+    "result_announces": AdmissionStage.result_announces,
+    "resultannounces": AdmissionStage.result_announces,
     "completed": AdmissionStage.completed,
     "delivered": AdmissionStage.delivered,
 }
@@ -82,6 +85,7 @@ def parse_admission_stage(value: Any) -> AdmissionStage:
         "certificate waiting": AdmissionStage.certificate_waiting,
         "waiting result": AdmissionStage.waiting_result,
         "result announced": AdmissionStage.result_announced,
+        "result announces": AdmissionStage.result_announces,
         "completed": AdmissionStage.completed,
         "delivered": AdmissionStage.delivered,
     }
