@@ -86,7 +86,8 @@ class TeamSalesItem(BaseModel):
     )
     total_admissions: int = Field(serialization_alias="totalAdmissions")
     leads_converted: int = Field(serialization_alias="leadsConverted")
-    total_revenue: int = Field(serialization_alias="totalRevenue")
+    total_revenue: Decimal = Field(serialization_alias="totalRevenue")
+    incentive: Decimal = Field(default=Decimal("0"), serialization_alias="incentive")
 
 class TeamSalesResponse(BaseModel):
     model_config = _alias_config()

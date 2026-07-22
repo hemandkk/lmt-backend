@@ -32,11 +32,12 @@ class TeamService:
         supervisor_id: Optional[int] = None,
     ) -> list[int]:
         """
-        Resolve which sales employees are in scope for the viewer.
-        Only role=employee members (not managers/sales_heads themselves).
+        Resolve which users are in scope for the viewer.
+        Admin: all active users (employees, managers, sales_heads).
+        Manager/sales_head: only employees who report to them.
         """
         query = db.query(User.id).filter(
-            User.role == UserRole.employee,
+            User.role.in_([UserRole.employee, UserRole.manager, UserRole.sales_head]),
             User.is_active.is_(True),
         )
 
@@ -45,6 +46,8 @@ class TeamService:
                 supervisor = UserRepository.get_by_id(db, supervisor_id)
                 if not supervisor or supervisor.role not in SUPERVISOR_ROLES:
                     raise ValueError("supervisorId must be a manager or sales_head.")
+                # Show employees under this supervisor
+                query = query.filter(User.role == UserRole.employee)
                 if supervisor.role == UserRole.manager:
                     query = query.filter(
                         User.reports_to_manager_id == supervisor_id
@@ -54,9 +57,15 @@ class TeamService:
                         User.reports_to_sales_head_id == supervisor_id
                     )
         elif is_manager(viewer):
-            query = query.filter(User.reports_to_manager_id == viewer.id)
+            query = query.filter(
+                User.role == UserRole.employee,
+                User.reports_to_manager_id == viewer.id,
+            )
         elif is_sales_head(viewer):
-            query = query.filter(User.reports_to_sales_head_id == viewer.id)
+            query = query.filter(
+                User.role == UserRole.employee,
+                User.reports_to_sales_head_id == viewer.id,
+            )
         else:
             raise ValueError("Access denied.")
 
@@ -67,10 +76,8 @@ class TeamService:
 
         if is_admin(viewer) and supervisor_id is None:
             emp = UserRepository.get_by_id(db, employee_id)
-            if not emp or emp.role != UserRole.employee or not emp.is_active:
-                raise ValueError(
-                    "employeeId must be an active sales employee."
-                )
+            if not emp or not emp.is_active:
+                raise ValueError("employeeId must be an active user.")
             return [employee_id]
 
         if employee_id not in ids:
@@ -414,20 +421,39 @@ class TeamService:
                 date_to=date_to,
                 employee_id=eid,
             )
-            print("rows", rows)
+            emp_admissions = 0
+            emp_converted = 0
+            emp_revenue = Decimal("0")
             if rows:
-                total_admissions += int(rows[0].get("leads_assigned") or 0)
-                leads_converted += int(rows[0].get("leads_converted") or 0)
-                total_revenue += TeamService._as_decimal(rows[0].get("revenue"))
+                emp_admissions = int(rows[0].get("leads_assigned") or 0)
+                emp_converted = int(rows[0].get("leads_converted") or 0)
+                emp_revenue = TeamService._as_decimal(rows[0].get("revenue"))
+                total_admissions += emp_admissions
+                leads_converted += emp_converted
+                total_revenue += emp_revenue
+
+            lead_counts = AnalyticsRepository.lead_counts_summary(
+                db,
+                employee_id=eid,
+                custom_from=date_from,
+                custom_to=date_to,
+            )
+            month_leads = lead_counts["this_month"]
+            incentive = AnalyticsRepository.incentive_status(
+                db,
+                employee_id=eid,
+                lead_count=month_leads,
+            )
 
             items.append(
                 {
                     "employee_id": eid,
                     "employee_code": user.employee_id,
                     "employee_name": user.name,
-                    "total_admissions": total_admissions,
-                    "leads_converted": leads_converted,
-                    "total_revenue": total_revenue,
+                    "total_admissions": emp_admissions,
+                    "leads_converted": emp_converted,
+                    "total_revenue": emp_revenue,
+                    "incentive": incentive["amount"],
                 }
             )
             for m in AnalyticsRepository.monthly_sales(
