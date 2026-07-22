@@ -130,7 +130,7 @@ class EmployeeService:
     ) -> EmployeeListResponse:
         if sales_only:
             # Dashboard / assign dropdowns: sales employees only (not mgr/head)
-            roles = [UserRole.employee]
+            roles = [UserRole.employee, UserRole.sales_head, UserRole.manager]
         elif role:
             roles = [normalize_role(role)]
             if roles[0] not in ASSIGNABLE_ROLES:

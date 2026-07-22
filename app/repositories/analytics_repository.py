@@ -400,7 +400,15 @@ class AnalyticsRepository:
             .outerjoin(Prospect, join_cond)
             .outerjoin(paid_sq, paid_sq.c.prospect_id == Prospect.id)
             .outerjoin(total_leads_sq, total_leads_sq.c.employee_id == User.id)
-            .filter(User.role == UserRole.employee, User.is_active.is_(True))
+            .filter(
+                User.role.in_([
+                    UserRole.employee,
+                    UserRole.manager,
+                    UserRole.sales_head,
+                ]),
+                User.is_active.is_(True),
+            )
+            #.filter(User.role == UserRole.employee, User.is_active.is_(True))
         )
 
         if employee_id is not None:

@@ -120,6 +120,8 @@ class TeamPerformanceItem(BaseModel):
     collection: Decimal
     monthly_target: Decimal = Field(serialization_alias="monthlyTarget")
     target_revenue: Decimal = Field(serialization_alias="targetRevenue")
+    #incentive: Decimal = Field(serialization_alias="incentiveAmount")
+    incentive: Decimal = Field(default=Decimal("0"), serialization_alias="incentiveAmount")
     converted_deal_value: Decimal = Field(
         serialization_alias="convertedDealValue"
     )

@@ -321,6 +321,20 @@ class TeamService:
             }
             admissions = int(row.get("leads_assigned") or 0)
             converted = int(row.get("leads_converted") or 0)
+            
+            lead_counts = AnalyticsRepository.lead_counts_summary(
+                db,
+                employee_id=employee_id,
+                custom_from=date_from,
+                custom_to=date_to,
+            )
+            month_leads = lead_counts["this_month"]
+            incentive = AnalyticsRepository.incentive_status(
+                db,
+                employee_id=employee_id,
+                lead_count=month_leads,
+            )
+            #incentive =
             collection = TeamService._as_decimal(row.get("revenue"))
             effective, _, _ = resolve_employee_monthly_target(db, user)
             target_revenue, converted_deal_value = TeamService._deal_metrics(
@@ -348,6 +362,7 @@ class TeamService:
                     "admissions": admissions,
                     "leads_converted": converted,
                     "collection": collection,
+                    "incentive": incentive["amount"],
                     "monthly_target": effective,
                     "target_revenue": target_revenue,
                     "converted_deal_value": converted_deal_value,
@@ -399,6 +414,7 @@ class TeamService:
                 date_to=date_to,
                 employee_id=eid,
             )
+            print("rows", rows)
             if rows:
                 total_admissions += int(rows[0].get("leads_assigned") or 0)
                 leads_converted += int(rows[0].get("leads_converted") or 0)
