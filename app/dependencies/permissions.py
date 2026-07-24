@@ -31,6 +31,17 @@ def require_admin(
     return current_user
 
 
+def require_admin_or_accountant(
+    current_user: User = Depends(get_current_user),
+) -> User:
+    if current_user.role not in (UserRole.admin, UserRole.accountant):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Admin or accountant access required.",
+        )
+    return current_user
+
+
 def require_employee(
     current_user: User = Depends(get_current_user),
 ) -> User:

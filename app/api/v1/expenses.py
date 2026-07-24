@@ -94,6 +94,12 @@ async def create_expense(
                 "installmentNumber": _form_value(
                     form, "installmentNumber", "installment_number"
                 ),
+                "expenseType": _form_value(
+                    form, "expenseType", "expense_type"
+                ),
+                "employeeId": _form_value(
+                    form, "employeeId", "employee_id"
+                ),
             }
             receipt_file = _pick_upload(
                 form, "receipt", "receiptFile", "receipt_file"
@@ -110,6 +116,12 @@ async def create_expense(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail=exc.errors(),
         ) from exc
+
+    if payload.expense_type == ExpenseType.incentive and not payload.employee_id:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="employeeId is required when expenseType is incentive.",
+        )
 
     return ExpenseService(db).create(
         payload,

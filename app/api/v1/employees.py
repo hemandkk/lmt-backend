@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 
 from app.core.id_generator import generate_next_code
 from app.db.session import get_db
-from app.dependencies.permissions import require_admin
+from app.dependencies.permissions import require_admin, require_admin_or_accountant
 from app.db.models.user import User
 from app.schemas.auth import ResetPasswordRequest
 from app.schemas.employee import (
@@ -67,9 +67,9 @@ def list_employees(
         ),
     ),
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_admin),
+    current_user: User = Depends(require_admin_or_accountant),
 ):
-    """Admin: paginated staff directory (all assignable roles)."""
+    """Admin/Accountant: paginated staff directory (all assignable roles)."""
     resolved_active = is_active
     if status_filter is not None:
         key = status_filter.strip().lower()
