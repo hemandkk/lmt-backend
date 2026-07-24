@@ -2,7 +2,11 @@ from datetime import date
 from decimal import Decimal
 from typing import Optional
 
+# Tip: Try to move these to the top of your file to avoid hidden local import costs
+from app.repositories.user_repository import UserRepository
+
 from sqlalchemy.orm import Session
+from app.core.roles import  SALES_ROLES
 
 from app.repositories.analytics_repository import AnalyticsRepository
 from app.schemas.dashboard import (
@@ -355,7 +359,6 @@ class ReportService:
         stage: Optional[str] = None,
         source: Optional[str] = None,
     ) -> EmployeeReportResponse:
-        from app.repositories.user_repository import UserRepository
 
         user = UserRepository.get_by_id(db, employee_id)
         if not user:
@@ -705,18 +708,19 @@ class ReportService:
         month: Optional[str] = None,
         employee_id: Optional[int] = None,
     ) -> IncentiveReportResponse:
+        # 1. Parse date ranges
         date_from, date_to, month_label = ReportService._parse_month(month)
 
+        # 2. Fetch base employees list
         employees = AnalyticsRepository.list_active_employees(
             db, employee_id=employee_id
         )
+        # 3. Fallback logic if explicit ID is missing/inactive
         # If filtering a specific id that is inactive/missing, still try that user
         if employee_id is not None and not employees:
-            from app.repositories.user_repository import UserRepository
-            from app.db.models.user import UserRole
-
+            
             user = UserRepository.get_by_id(db, employee_id)
-            if not user or user.role != UserRole.employee:
+            if not user or user.role not in  SALES_ROLES:
                 raise ValueError("Employee not found.")
             employees = [user]
 
