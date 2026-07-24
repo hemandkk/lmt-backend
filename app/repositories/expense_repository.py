@@ -1,10 +1,11 @@
 from __future__ import annotations
 
 from datetime import date
+from typing import Optional
 
 from sqlalchemy.orm import Session, joinedload
 
-from app.db.models.expense import Expense
+from app.db.models.expense import Expense, ExpenseType
 
 
 class ExpenseRepository:
@@ -53,12 +54,15 @@ class ExpenseRepository:
         date_from: date | None = None,
         date_to: date | None = None,
         search: str | None = None,
+        expense_type: Optional[ExpenseType] = None,
+        employee_id: int | None = None,
     ) -> tuple[int, list[Expense]]:
         query = self.db.query(Expense).options(
             joinedload(Expense.creator),
             joinedload(Expense.requester),
             joinedload(Expense.approver),
             joinedload(Expense.verifier),
+            joinedload(Expense.employee),
         )
 
         if date_from is not None:
@@ -73,6 +77,10 @@ class ExpenseRepository:
                 | (Expense.transaction_id.ilike(like))
                 | (Expense.expense_id.ilike(like))
             )
+        if expense_type is not None:
+            query = query.filter(Expense.expense_type == expense_type)
+        if employee_id is not None:
+            query = query.filter(Expense.employee_id == employee_id)
 
         total = query.count()
         items = (

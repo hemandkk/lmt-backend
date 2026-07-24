@@ -17,6 +17,11 @@ class PaymentRequestStatus(str, enum.Enum):
     approved = "approved"
 
 
+class PaymentRequestType(str, enum.Enum):
+    office = "office"
+    incentive = "incentive"
+
+
 class PaymentRequest(TimestampMixin, Base):
     __tablename__ = "payment_requests"
 
@@ -42,6 +47,24 @@ class PaymentRequest(TimestampMixin, Base):
     installment_number: Mapped[str | None] = mapped_column(
         String(100),
         nullable=True,
+    )
+
+    payment_type: Mapped[PaymentRequestType] = mapped_column(
+        Enum(
+            PaymentRequestType,
+            values_callable=lambda obj: [e.value for e in obj],
+            native_enum=False,
+            length=20,
+        ),
+        default=PaymentRequestType.office,
+        nullable=False,
+        index=True,
+    )
+
+    employee_id: Mapped[int | None] = mapped_column(
+        ForeignKey("users.id"),
+        nullable=True,
+        index=True,
     )
 
     status: Mapped[PaymentRequestStatus] = mapped_column(
@@ -92,6 +115,7 @@ class PaymentRequest(TimestampMixin, Base):
     requested_by = relationship("User", foreign_keys=[requested_by_id])
     paid_by = relationship("User", foreign_keys=[paid_by_id])
     verified_by = relationship("User", foreign_keys=[verified_by_id])
+    employee = relationship("User", foreign_keys=[employee_id])
     expense = relationship(
         "Expense",
         back_populates="payment_request",

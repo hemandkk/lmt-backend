@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 
 from app.core.file_storage import FileStorage
 from app.core.id_generator import generate_id
-from app.db.models.expense import Expense
+from app.db.models.expense import Expense, ExpenseType
 from app.repositories.expense_repository import ExpenseRepository
 from app.schemas.expense import ExpenseCreate, ExpenseResponse, ExpenseUpdate
 
@@ -31,6 +31,9 @@ class ExpenseService:
             "paid_to": expense.paid_to,
             "transaction_id": expense.transaction_id,
             "installment_number": expense.installment_number,
+            "expense_type": expense.expense_type,
+            "employee_id": expense.employee_id,
+            "employee_name": self._user_name(expense.employee) if expense.employee_id else None,
             "receipt_url": expense.receipt_url,
             "invoice_url": expense.invoice_url,
             "payment_request_id": expense.payment_request_id,
@@ -84,6 +87,8 @@ class ExpenseService:
             paid_to=payload.paid_to,
             transaction_id=payload.transaction_id,
             installment_number=payload.installment_number,
+            expense_type=payload.expense_type,
+            employee_id=payload.employee_id,
             receipt_url=receipt_url,
             invoice_url=invoice_url,
             payment_request_id=payment_request_id,
@@ -108,6 +113,8 @@ class ExpenseService:
         date_from=None,
         date_to=None,
         search: str | None = None,
+        expense_type: ExpenseType | None = None,
+        employee_id: int | None = None,
     ) -> dict:
         """All accountants and admins see every expense (no user scope)."""
         skip = (page - 1) * page_size
@@ -117,6 +124,8 @@ class ExpenseService:
             date_from=date_from,
             date_to=date_to,
             search=search,
+            expense_type=expense_type,
+            employee_id=employee_id,
         )
         return {
             "total": total,

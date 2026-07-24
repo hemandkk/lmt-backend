@@ -489,6 +489,50 @@ class ActivityLogListResponse(BaseModel):
     page_size: int = Field(serialization_alias="pageSize")
 
 
+class IncentiveReleaseMonthItem(BaseModel):
+    model_config = _alias_config()
+
+    month: str
+    admissions: int = 0
+    slab_rate: Decimal = Field(default=Decimal("0"), serialization_alias="slabRate")
+    booked_incentive: Decimal = Field(default=Decimal("0"), serialization_alias="bookedIncentive")
+    completed_admissions: int = Field(default=0, serialization_alias="completedAdmissions")
+    receivable_incentive: Decimal = Field(default=Decimal("0"), serialization_alias="receivableIncentive")
+
+
+class IncentiveReleaseSummary(BaseModel):
+    model_config = _alias_config()
+
+    total_admissions: int = Field(default=0, serialization_alias="totalAdmissions")
+    total_booked_incentive: Decimal = Field(default=Decimal("0"), serialization_alias="totalBookedIncentive")
+    total_completed_admissions: int = Field(default=0, serialization_alias="totalCompletedAdmissions")
+    total_receivable_incentive: Decimal = Field(default=Decimal("0"), serialization_alias="totalReceivableIncentive")
+    total_paid: Decimal = Field(default=Decimal("0"), serialization_alias="totalPaid")
+    balance_to_pay: Decimal = Field(default=Decimal("0"), serialization_alias="balanceToPay")
+
+
+class IncentiveReleaseResponse(BaseModel):
+    model_config = _alias_config()
+
+    month: str
+    date_from: date = Field(serialization_alias="dateFrom")
+    date_to: date = Field(serialization_alias="dateTo")
+    employee_id: Optional[int] = Field(default=None, serialization_alias="employeeId")
+    employee_code: Optional[str] = Field(default=None, serialization_alias="employeeCode")
+    employee_name: Optional[str] = Field(default=None, serialization_alias="employeeName")
+    months: list[IncentiveReleaseMonthItem] = Field(default_factory=list)
+    summary: IncentiveReleaseSummary = Field(default_factory=IncentiveReleaseSummary)
+
+
+class IncentiveReleaseListResponse(BaseModel):
+    model_config = _alias_config()
+
+    month: str
+    date_from: date = Field(serialization_alias="dateFrom")
+    date_to: date = Field(serialization_alias="dateTo")
+    items: list[IncentiveReleaseResponse] = Field(default_factory=list)
+
+
 class ExportRequest(BaseModel):
     model_config = _alias_config()
 

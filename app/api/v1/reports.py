@@ -12,12 +12,15 @@ from app.schemas.dashboard import (
     AdminReportResponse,
     EmployeePerformanceReportResponse,
     EmployeeReportResponse,
+    IncentiveReleaseListResponse,
+    IncentiveReleaseResponse,
     IncentiveReportResponse,
     LeadsByStageReportResponse,
     LeadsByAdminStageReportResponse,
     RevenueReportResponse,
 )
 from app.services.dashboard_service import ReportService
+from app.services.incentive_release_service import IncentiveReleaseService
 
 router = APIRouter(prefix="/reports", tags=["Reports & Analytics"])
 
@@ -213,6 +216,40 @@ def incentives_report(
     scoped_employee_id = resolve_employee_scope(current_user, employee_id)
     try:
         return ReportService.incentive_report(
+            db,
+            month=month,
+            employee_id=scoped_employee_id,
+        )
+    except ValueError as ex:
+        raise HTTPException(status_code=400, detail=str(ex)) from ex
+
+
+@router.get(
+    "/incentive-releases",
+    response_model=IncentiveReleaseResponse | IncentiveReleaseListResponse,
+)
+def incentive_releases_report(
+    month: Optional[str] = Query(
+        None,
+        description="Month in YYYY-MM format (e.g. 2026-07). Defaults to current month.",
+    ),
+    employee_id: Optional[int] = Query(
+        None,
+        alias="employeeId",
+        description="Admin only: filter to one employee. Omit for all employees.",
+    ),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Incentive release report — monthly breakdown of admissions, booked/receivable incentives.
+    - Employee: own incentive releases only
+    - Admin with ?employeeId=: single employee view
+    - Admin without ?employeeId=: per-employee breakdown for all employees
+    """
+    scoped_employee_id = resolve_employee_scope(current_user, employee_id)
+    try:
+        return IncentiveReleaseService.incentive_release_report(
             db,
             month=month,
             employee_id=scoped_employee_id,

@@ -6,6 +6,8 @@ from typing import Optional
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from app.db.models.expense import ExpenseType
+
 
 def _alias_config() -> ConfigDict:
     return ConfigDict(
@@ -30,6 +32,15 @@ class ExpenseBase(BaseModel):
         default=None,
         max_length=100,
         alias="installmentNumber",
+    )
+    expense_type: ExpenseType = Field(
+        default=ExpenseType.office,
+        alias="expenseType",
+    )
+    employee_id: Optional[int] = Field(
+        default=None,
+        alias="employeeId",
+        description="Required when expenseType is incentive",
     )
 
 
@@ -59,6 +70,11 @@ class ExpenseUpdate(BaseModel):
 class ExpenseResponse(ExpenseBase):
     id: int
     expense_id: str = Field(..., alias="expenseId", serialization_alias="expenseId")
+    employee_name: Optional[str] = Field(
+        default=None,
+        alias="employeeName",
+        serialization_alias="employeeName",
+    )
     receipt_url: Optional[str] = Field(
         default=None,
         alias="receiptUrl",

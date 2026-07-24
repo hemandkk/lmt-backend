@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 
 from app.core.file_storage import FileStorage
 from app.core.id_generator import generate_id
-from app.db.models.payment_request import PaymentRequest, PaymentRequestStatus
+from app.db.models.payment_request import PaymentRequest, PaymentRequestStatus, PaymentRequestType
 from app.repositories.payment_request_repository import PaymentRequestRepository
 from app.schemas.expense import ExpenseCreate
 from app.schemas.payment_request import (
@@ -42,6 +42,9 @@ class PaymentRequestService:
             "paid_to_details": row.paid_to_details,
             "amount": row.amount,
             "installment_number": row.installment_number,
+            "payment_type": row.payment_type,
+            "employee_id": row.employee_id,
+            "employee_name": self._user_name(row.employee) if row.employee_id else None,
             "status": row.status,
             "transaction_id": row.transaction_id,
             "receipt_url": row.receipt_url,
@@ -68,6 +71,9 @@ class PaymentRequestService:
         payload: PaymentRequestCreate,
         actor_id: int | None = None,
     ) -> PaymentRequestResponse:
+        if payload.payment_type == PaymentRequestType.incentive and not payload.employee_id:
+            raise ValueError("employeeId is required when paymentType is 'incentive'.")
+
         code = generate_id(self.db, PaymentRequest, "request_id", "PRQ")
         row = PaymentRequest(
             request_id=code,
@@ -75,6 +81,8 @@ class PaymentRequestService:
             paid_to_details=payload.paid_to_details,
             amount=payload.amount,
             installment_number=payload.installment_number,
+            payment_type=payload.payment_type,
+            employee_id=payload.employee_id,
             status=PaymentRequestStatus.requested,
             requested_by_id=actor_id,
         )
@@ -195,6 +203,8 @@ class PaymentRequestService:
             paid_to=row.paid_to_details,
             transaction_id=row.transaction_id,
             installment_number=row.installment_number,
+            expense_type=row.payment_type.value if hasattr(row.payment_type, 'value') else row.payment_type,
+            employee_id=row.employee_id,
         )
         ExpenseService(self.db).create(
             payload=expense_payload,

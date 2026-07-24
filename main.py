@@ -300,6 +300,49 @@ def ensure_schema_updates() -> None:
             except Exception:
                 pass
 
+        # --- Incentive payment type columns ---
+        if "payment_requests" in tables:
+            pr_cols = {col["name"] for col in inspector.get_columns("payment_requests")}
+            if "payment_type" not in pr_cols:
+                conn.execute(text(
+                    "ALTER TABLE payment_requests "
+                    "ADD COLUMN payment_type VARCHAR(20) NOT NULL DEFAULT 'office'"
+                ))
+                conn.execute(text(
+                    "CREATE INDEX IF NOT EXISTS ix_payment_requests_payment_type "
+                    "ON payment_requests (payment_type)"
+                ))
+            if "employee_id" not in pr_cols:
+                conn.execute(text(
+                    "ALTER TABLE payment_requests "
+                    "ADD COLUMN employee_id INTEGER REFERENCES users(id) ON DELETE SET NULL"
+                ))
+                conn.execute(text(
+                    "CREATE INDEX IF NOT EXISTS ix_payment_requests_employee_id "
+                    "ON payment_requests (employee_id)"
+                ))
+
+        if "expenses" in tables:
+            exp_cols = {col["name"] for col in inspector.get_columns("expenses")}
+            if "expense_type" not in exp_cols:
+                conn.execute(text(
+                    "ALTER TABLE expenses "
+                    "ADD COLUMN expense_type VARCHAR(20) NOT NULL DEFAULT 'office'"
+                ))
+                conn.execute(text(
+                    "CREATE INDEX IF NOT EXISTS ix_expenses_expense_type "
+                    "ON expenses (expense_type)"
+                ))
+            if "employee_id" not in exp_cols:
+                conn.execute(text(
+                    "ALTER TABLE expenses "
+                    "ADD COLUMN employee_id INTEGER REFERENCES users(id) ON DELETE SET NULL"
+                ))
+                conn.execute(text(
+                    "CREATE INDEX IF NOT EXISTS ix_expenses_employee_id "
+                    "ON expenses (employee_id)"
+                ))
+
 
 def seed_default_incentive_slabs() -> None:
     """Seed starter lead-count slabs when the table is empty."""

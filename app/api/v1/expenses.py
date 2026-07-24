@@ -16,6 +16,7 @@ from fastapi import (
 from pydantic import ValidationError
 from sqlalchemy.orm import Session
 
+from app.db.models.expense import ExpenseType
 from app.db.models.user import User
 from app.db.session import get_db
 from app.dependencies.permissions import (
@@ -29,6 +30,16 @@ from app.schemas.expense import (
     ExpenseUpdate,
 )
 from app.services.expense_service import ExpenseService
+
+
+def _parse_expense_type(raw: str | None) -> ExpenseType | None:
+    if not raw:
+        return None
+    value = raw.strip().lower()
+    try:
+        return ExpenseType(value)
+    except ValueError:
+        return None
 
 router = APIRouter(prefix="/expenses", tags=["Expenses"])
 
@@ -115,6 +126,16 @@ def list_expenses(
     date_from: date | None = Query(None, alias="dateFrom"),
     date_to: date | None = Query(None, alias="dateTo"),
     search: str | None = Query(None),
+    expense_type: str | None = Query(
+        None,
+        alias="expenseType",
+        description="office | incentive",
+    ),
+    employee_id: int | None = Query(
+        None,
+        alias="employeeId",
+        description="Filter by employee (for incentive expenses)",
+    ),
     db: Session = Depends(get_db),
     current_user: User = Depends(require_expense_manager),
 ):
@@ -124,6 +145,8 @@ def list_expenses(
         date_from=date_from,
         date_to=date_to,
         search=search,
+        expense_type=_parse_expense_type(expense_type),
+        employee_id=employee_id,
     )
 
 
