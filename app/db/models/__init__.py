@@ -8,6 +8,8 @@ from app.db.models.specialization import Specialization
 from app.db.models.notification import Notification
 from app.db.models.activity_log import ActivityLog
 from app.db.models.app_setting import AppSetting
+from app.db.models.expense import Expense
+from app.db.models.payment_request import PaymentRequest
 
 __all__ = [
     "User",
@@ -20,4 +22,6 @@ __all__ = [
     "Notification",
     "ActivityLog",
     "AppSetting",
+    "Expense",
+    "PaymentRequest",
 ]

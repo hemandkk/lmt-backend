@@ -4,6 +4,10 @@ from fastapi import Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.core.roles import (
+    can_delete_expenses,
+    can_fulfill_payment_requests,
+    can_manage_expenses,
+    can_manage_payment_requests,
     can_mutate_leads,
     can_verify_payments,
     can_view_team_dashboard,
@@ -57,6 +61,50 @@ def require_payment_verifier(
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Only admin or accountant may verify payments.",
+        )
+    return current_user
+
+
+def require_expense_manager(
+    current_user: User = Depends(get_current_user),
+) -> User:
+    if not can_manage_expenses(current_user):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only admin or accountant may manage expenses.",
+        )
+    return current_user
+
+
+def require_expense_deleter(
+    current_user: User = Depends(get_current_user),
+) -> User:
+    if not can_delete_expenses(current_user):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only admin may delete expenses.",
+        )
+    return current_user
+
+
+def require_payment_request_manager(
+    current_user: User = Depends(get_current_user),
+) -> User:
+    if not can_manage_payment_requests(current_user):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only admin or accountant may manage payment requests.",
+        )
+    return current_user
+
+
+def require_payment_request_fulfiller(
+    current_user: User = Depends(get_current_user),
+) -> User:
+    if not can_fulfill_payment_requests(current_user):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only admin may fulfill payment requests.",
         )
     return current_user
 

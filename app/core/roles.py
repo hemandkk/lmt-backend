@@ -157,6 +157,26 @@ def can_verify_payments(user: User) -> bool:
     return user.role in (UserRole.admin, UserRole.accountant)
 
 
+def can_manage_expenses(user: User) -> bool:
+    """Accountant or admin may create/list/update expenses."""
+    return user.role in (UserRole.admin, UserRole.accountant)
+
+
+def can_delete_expenses(user: User) -> bool:
+    """Only admin may delete expenses."""
+    return user.role == UserRole.admin
+
+
+def can_manage_payment_requests(user: User) -> bool:
+    """Accountant or admin may work with payment requests."""
+    return user.role in (UserRole.admin, UserRole.accountant)
+
+
+def can_fulfill_payment_requests(user: User) -> bool:
+    """Only admin may mark payment done (upload txn/receipt)."""
+    return user.role == UserRole.admin
+
+
 def can_view_team_dashboard(user: User) -> bool:
     return user.role in TEAM_VIEWER_ROLES
 

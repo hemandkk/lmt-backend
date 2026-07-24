@@ -14,6 +14,8 @@ from app.db.models.course import Course
 from app.db.models.specialization import Specialization
 from app.db.models.payment import Payment
 from app.db.models.prospect_document import ProspectDocument
+from app.db.models.expense import Expense
+from app.db.models.payment_request import PaymentRequest
 
 from app.core.config import settings
 
