@@ -13,8 +13,14 @@ RESTRICTED_ADMISSION_STAGES = frozenset(
     {
         AdmissionStage.waiting_result,
         AdmissionStage.result_announced,
-        AdmissionStage.completed,
         AdmissionStage.delivered,
+    }
+)
+
+# Stages only admin + sales roles may set (processing_team cannot)
+COMPLETED_ONLY_STAGES = frozenset(
+    {
+        AdmissionStage.completed,
     }
 )
 
@@ -211,6 +217,8 @@ def admission_stage_allowed_for_role(
     """Whether caller may SET this admission stage."""
     if not can_change_admission_stage(user):
         return False
+    if stage in COMPLETED_ONLY_STAGES:
+        return user.role in (UserRole.admin, *SALES_ROLES)
     if stage in RESTRICTED_ADMISSION_STAGES:
         return can_set_restricted_admission_stage(user)
     return True
