@@ -378,6 +378,94 @@ class EmployeeService:
         db.commit()
 
     @staticmethod
+    def update_status(
+        db: Session,
+        employee_id: int,
+        new_status: str,
+        transfer_to_id: int | None = None,
+        actor_id: int | None = None,
+    ) -> EmployeeResponse:
+        user = UserRepository.get_by_id(db, employee_id)
+        if not user or user.role not in ASSIGNABLE_ROLES:
+            raise ValueError("Employee not found.")
+
+        if new_status == "active":
+            user.is_active = True
+            db.commit()
+            return EmployeeService.get(db, user.id)
+
+        # Deactivating: check for remaining leads
+        lead_count = (
+            db.query(func.count(Prospect.id))
+            .filter(Prospect.assigned_to_id == user.id)
+            .scalar()
+            or 0
+        )
+
+        if lead_count > 0:
+            if transfer_to_id is None:
+                raise ValueError(
+                    f"Employee has {lead_count} lead(s) assigned. "
+                    "Please transfer all leads before deactivating, "
+                    "or provide a transferToId to auto-transfer."
+                )
+            target = UserRepository.get_by_id(db, transfer_to_id)
+            if not target or not target.is_active:
+                raise ValueError(
+                    "transferToId must be an active employee."
+                )
+            if transfer_to_id == employee_id:
+                raise ValueError("Cannot transfer leads to the same employee.")
+
+            # Bulk-transfer all leads
+            db.query(Prospect).filter(
+                Prospect.assigned_to_id == user.id
+            ).update(
+                {Prospect.assigned_to_id: transfer_to_id},
+                synchronize_session="fetch",
+            )
+
+            ActivityLogService.log(
+                db,
+                action="bulk_lead_transfer",
+                entity_type="user",
+                entity_id=user.id,
+                description=(
+                    f"All {lead_count} lead(s) transferred from "
+                    f"{user.employee_id} to {target.employee_id} "
+                    f"before deactivation"
+                ),
+                user_id=actor_id,
+                detail={
+                    "fromEmployee": user.employee_id,
+                    "toEmployee": target.employee_id,
+                    "leadCount": lead_count,
+                },
+            )
+
+        user.is_active = False
+        db.commit()
+
+        ActivityLogService.log(
+            db,
+            action="user_deactivated",
+            entity_type="user",
+            entity_id=user.id,
+            description=(
+                f"Employee {user.employee_id} ({user.name}) deactivated"
+            ),
+            user_id=actor_id,
+            detail={
+                "employeeId": user.employee_id,
+                "name": user.name,
+                "leadsTransferred": lead_count,
+                "transferToId": transfer_to_id,
+            },
+        )
+
+        return EmployeeService.get(db, user.id)
+
+    @staticmethod
     def deactivate(db: Session, employee_id: int) -> None:
         user = UserRepository.get_by_id(db, employee_id)
         if not user or user.role not in ASSIGNABLE_ROLES:

@@ -150,6 +150,25 @@ class EmployeeResponse(BaseModel):
     )
 
 
+class EmployeeStatusUpdate(BaseModel):
+    model_config = _alias_config()
+
+    status: str = Field(..., description="'active' or 'inactive'")
+    transfer_to_id: Optional[int] = Field(
+        default=None,
+        alias="transferToId",
+        description="Employee ID to transfer leads to when deactivating.",
+    )
+
+    @field_validator("status")
+    @classmethod
+    def validate_status(cls, value: str) -> str:
+        v = value.strip().lower()
+        if v not in ("active", "inactive"):
+            raise ValueError("status must be 'active' or 'inactive'.")
+        return v
+
+
 class EmployeeListResponse(BaseModel):
     model_config = _alias_config()
 

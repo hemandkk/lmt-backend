@@ -12,6 +12,7 @@ from app.schemas.employee import (
     EmployeeCreate,
     EmployeeListResponse,
     EmployeeResponse,
+    EmployeeStatusUpdate,
     EmployeeUpdate,
 )
 from app.services.employee_service import EmployeeService
@@ -152,6 +153,33 @@ def reset_employee_password(
     except ValueError as ex:
         raise HTTPException(status_code=404, detail=str(ex)) from ex
     return {"message": "Password reset successfully."}
+
+
+@router.patch("/{employee_id}/status", response_model=EmployeeResponse)
+def update_employee_status(
+    employee_id: int,
+    payload: EmployeeStatusUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_admin),
+):
+    """Activate/deactivate employee. Deactivation requires all leads to be
+    transferred first (or provide transferToId to auto-transfer)."""
+    try:
+        return EmployeeService.update_status(
+            db,
+            employee_id,
+            new_status=payload.status,
+            transfer_to_id=payload.transfer_to_id,
+            actor_id=current_user.id,
+        )
+    except ValueError as ex:
+        detail = str(ex)
+        code = (
+            status.HTTP_400_BAD_REQUEST
+            if "lead" in detail.lower() or "transfer" in detail.lower()
+            else status.HTTP_404_NOT_FOUND
+        )
+        raise HTTPException(status_code=code, detail=detail) from ex
 
 
 @router.delete("/{employee_id}", status_code=status.HTTP_204_NO_CONTENT)
