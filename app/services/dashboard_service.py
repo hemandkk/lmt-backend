@@ -53,7 +53,7 @@ def _metrics_for_scope(
         custom_to=date_to,
     )
     payment_status = AnalyticsRepository.payment_status_summary(
-        db, employee_id=employee_id
+        db, employee_id=employee_id, date_from=date_from, date_to=date_to,
     )
     payment_collected = AnalyticsRepository.payment_collected_summary(
         db,
@@ -74,19 +74,25 @@ def _metrics_for_scope(
         date_to=date_to,
     )
 
-    exam = AnalyticsRepository.exam_stats(db, employee_id=employee_id)
-    # Targets / incentives are lead-count based (leads = sales)
-    month_leads = lead_counts["this_month"]
+    exam = AnalyticsRepository.exam_stats(
+        db, employee_id=employee_id, date_from=date_from, date_to=date_to,
+    )
+
+    # When custom date range: use filtered lead count for targets/incentives
+    filtered_leads = lead_counts.get("custom") if lead_counts.get("custom") is not None else lead_counts["this_month"]
     target = AnalyticsRepository.sales_target_summary(
         db,
         employee_id=employee_id,
-        achieved=Decimal(str(month_leads)),
+        achieved=Decimal(str(filtered_leads)),
     )
     incentive = AnalyticsRepository.incentive_status(
         db,
         employee_id=employee_id,
-        lead_count=month_leads,
+        lead_count=filtered_leads,
     )
+
+    # Total leads: use custom count when date range provided, else all-time
+    total_leads = lead_counts.get("custom") if lead_counts.get("custom") is not None else lead_counts["total"]
 
     return {
         "lead_counts": LeadCountSummary(**lead_counts),
@@ -101,7 +107,7 @@ def _metrics_for_scope(
         "target_source": target.get("target_source", "default"),
         "incentive": IncentiveStatusSummary(**incentive),
         "exam_stats": ExamStatsSummary(**exam),
-        "total_leads": lead_counts["total"],
+        "total_leads": total_leads,
     }
 
 

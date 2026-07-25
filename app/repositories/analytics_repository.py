@@ -129,6 +129,8 @@ class AnalyticsRepository:
     def payment_status_summary(
         db: Session,
         employee_id: Optional[int] = None,
+        date_from: Optional[date] = None,
+        date_to: Optional[date] = None,
     ) -> dict:
         """
         Bucket leads by paid / estimated_deal_value ratio (mutually exclusive):
@@ -149,6 +151,12 @@ class AnalyticsRepository:
 
         if employee_id is not None:
             base = base.filter(Prospect.assigned_to_id == employee_id)
+
+        start_dt, end_dt = datetime_range_bounds(date_from, date_to)
+        if start_dt:
+            base = base.filter(Prospect.created_at >= start_dt)
+        if end_dt:
+            base = base.filter(Prospect.created_at <= end_dt)
 
         advanced_paid = 0
         fifty_percent = 0
@@ -616,10 +624,18 @@ class AnalyticsRepository:
     def exam_stats(
         db: Session,
         employee_id: Optional[int] = None,
+        date_from: Optional[date] = None,
+        date_to: Optional[date] = None,
     ) -> dict:
         query = db.query(Prospect)
         if employee_id is not None:
             query = query.filter(Prospect.assigned_to_id == employee_id)
+
+        start_dt, end_dt = datetime_range_bounds(date_from, date_to)
+        if start_dt:
+            query = query.filter(Prospect.created_at >= start_dt)
+        if end_dt:
+            query = query.filter(Prospect.created_at <= end_dt)
 
         attended = query.filter(Prospect.exam_attended.is_(True)).count()
         certified = query.filter(Prospect.exam_certified.is_(True)).count()
