@@ -69,6 +69,7 @@ def list_employees(
             "dropdowns; excludes managers, sales_head, accountant, processing)."
         ),
     ),
+    all_records: bool = Query(False, alias="all"),
     db: Session = Depends(get_db),
     current_user: User = Depends(require_admin_or_accountant),
 ):
@@ -96,6 +97,7 @@ def list_employees(
         is_active=resolved_active,
         role=role,
         sales_only=sales_only,
+        all_records=all_records,
     )
 
 

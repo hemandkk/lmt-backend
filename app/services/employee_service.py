@@ -127,6 +127,7 @@ class EmployeeService:
         is_active: bool | None = None,
         role: str | None = None,
         sales_only: bool = False,
+        all_records: bool = False,
     ) -> EmployeeListResponse:
         if sales_only:
             # Dashboard / assign dropdowns: sales employees only (not mgr/head)
@@ -164,12 +165,12 @@ class EmployeeService:
             )
 
         total = query.count()
-        users = (
-            query.order_by(User.name.asc())
-            .offset((page - 1) * page_size)
-            .limit(page_size)
-            .all()
-        )
+        query = query.order_by(User.name.asc())
+
+        if not all_records:
+            query = query.offset((page - 1) * page_size).limit(page_size)
+
+        users = query.all()
         items = [EmployeeService._to_response(db, u) for u in users]
         return EmployeeListResponse.build(items, total, page, page_size)
 
