@@ -40,6 +40,8 @@ from app.dependencies.auth import get_current_user, get_optional_user
 from app.dependencies.permissions import (
     deny_if_cannot_mutate_leads,
     require_admin,
+    require_lead_editor,
+    require_lead_viewer,
 )
 from app.schemas.auth import ResetPasswordRequest
 from app.schemas.prospect import (
@@ -512,7 +514,7 @@ def export_prospects(
 def get_prospect(
     prospect_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_lead_viewer),
 ):
     try:
         prospect = ProspectService.get(db, prospect_id)
@@ -589,12 +591,11 @@ async def update_prospect(
     prospect_id: int,
     request: Request,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_lead_editor),
 ):
     """
     Edit lead. Supports same JSON / multipart formats as create.
     """
-    deny_if_cannot_mutate_leads(current_user)
     content_type = (request.headers.get("content-type") or "").lower()
     actor_id = current_user.id
 
@@ -676,7 +677,7 @@ def reset_prospect_password(
 def list_prospect_documents(
     prospect_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_lead_viewer),
 ):
     """List documents for a lead (same data as GET /documents/prospects/{id})."""
     try:
@@ -819,7 +820,7 @@ async def upload_lead_document(
 def list_prospect_payments(
     prospect_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_lead_viewer),
 ):
     """List payments for a lead."""
     try:
@@ -841,7 +842,7 @@ def get_prospect_timeline(
     page: int = Query(1, ge=1),
     page_size: int = Query(50, alias="pageSize", ge=1, le=200),
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_lead_viewer),
 ):
     """
     Lead activity timeline: activity logs + payments + document uploads,

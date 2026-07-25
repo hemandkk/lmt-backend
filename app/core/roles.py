@@ -177,6 +177,30 @@ def can_fulfill_payment_requests(user: User) -> bool:
     return user.role == UserRole.admin
 
 
+def can_view_all_leads(user: User) -> bool:
+    """Admin, accountant, processing_team can view all leads across employees."""
+    return user.role in (
+        UserRole.admin,
+        UserRole.accountant,
+        UserRole.processing_team,
+    )
+
+
+def can_view_any_payment(user: User) -> bool:
+    """Admin and accountant can view payments across all employees."""
+    return user.role in (UserRole.admin, UserRole.accountant)
+
+
+def can_edit_lead(user: User) -> bool:
+    """Admin, sales roles, accountant, processing_team can edit leads."""
+    return user.role in (
+        UserRole.admin,
+        *SALES_ROLES,
+        UserRole.accountant,
+        UserRole.processing_team,
+    )
+
+
 def can_view_team_dashboard(user: User) -> bool:
     return user.role in TEAM_VIEWER_ROLES
 
@@ -198,12 +222,7 @@ def visible_admission_stages_for_role(
     """
     Forced admission-stage visibility for list/get.
     None = no force filter (admin / sales users use other scopes).
-    """
-    """
-    if user.role == UserRole.accountant:
-        return ACCOUNTANT_VISIBLE_STAGES
-    if user.role == UserRole.processing_team:
-        return PROCESSING_VISIBLE_STAGES
+    Accountant and processing_team now see all leads (no stage filter).
     """
     return None
 
@@ -213,18 +232,10 @@ def prospect_visible_to_user(prospect, user: User) -> bool:
         return True
     if is_sales_user(user):
         return prospect.assigned_to_id == user.id
+    if can_view_all_leads(user):
+        return True
 
-    stage = getattr(prospect, "admission_stage", None)
-    if isinstance(stage, str):
-        try:
-            stage = AdmissionStage(stage)
-        except ValueError:
-            return False
-
-    allowed = visible_admission_stages_for_role(user)
-    if allowed is None:
-        return False
-    return stage in allowed
+    return False
 
 
 def intersect_admission_filters(

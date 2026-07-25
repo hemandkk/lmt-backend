@@ -5,11 +5,14 @@ from sqlalchemy.orm import Session
 
 from app.core.roles import (
     can_delete_expenses,
+    can_edit_lead,
     can_fulfill_payment_requests,
     can_manage_expenses,
     can_manage_payment_requests,
     can_mutate_leads,
     can_verify_payments,
+    can_view_all_leads,
+    can_view_any_payment,
     can_view_team_dashboard,
     is_admin,
     is_sales_user,
@@ -203,3 +206,27 @@ def deny_if_cannot_mutate_leads(current_user: User) -> None:
             status_code=status.HTTP_403_FORBIDDEN,
             detail="You do not have permission to modify leads.",
         )
+
+
+def require_lead_viewer(
+    current_user: User = Depends(get_current_user),
+) -> User:
+    """Admin, sales roles, accountant, or processing_team may view leads."""
+    if not (is_admin(current_user) or is_sales_user(current_user) or can_view_all_leads(current_user)):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You do not have permission to view leads.",
+        )
+    return current_user
+
+
+def require_lead_editor(
+    current_user: User = Depends(get_current_user),
+) -> User:
+    """Admin, sales roles, accountant, or processing_team may edit leads."""
+    if not can_edit_lead(current_user):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You do not have permission to edit leads.",
+        )
+    return current_user
