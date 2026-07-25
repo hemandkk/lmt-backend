@@ -1,6 +1,8 @@
+import re
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 
 from app.core.id_generator import generate_next_code
@@ -174,12 +176,16 @@ def update_employee_status(
         )
     except ValueError as ex:
         detail = str(ex)
-        code = (
-            status.HTTP_400_BAD_REQUEST
-            if "lead" in detail.lower() or "transfer" in detail.lower()
-            else status.HTTP_404_NOT_FOUND
-        )
-        raise HTTPException(status_code=code, detail=detail) from ex
+        match = re.search(r"has (\d+) lead", detail)
+        if match:
+            return JSONResponse(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                content={
+                    "message": detail,
+                    "leadCount": int(match.group(1)),
+                },
+            )
+        raise HTTPException(status_code=404, detail=detail) from ex
 
 
 @router.delete("/{employee_id}", status_code=status.HTTP_204_NO_CONTENT)

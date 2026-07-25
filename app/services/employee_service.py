@@ -470,5 +470,19 @@ class EmployeeService:
         user = UserRepository.get_by_id(db, employee_id)
         if not user or user.role not in ASSIGNABLE_ROLES:
             raise ValueError("Employee not found.")
+
+        lead_count = (
+            db.query(func.count(Prospect.id))
+            .filter(Prospect.assigned_to_id == user.id)
+            .scalar()
+            or 0
+        )
+
+        if lead_count > 0:
+            raise ValueError(
+                f"Employee has {lead_count} lead(s) assigned. "
+                "Please transfer all leads before deactivating."
+            )
+
         user.is_active = False
         db.commit()
