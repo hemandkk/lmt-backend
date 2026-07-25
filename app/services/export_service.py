@@ -8,8 +8,10 @@ from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
+from app.core.masking import MASKED_VALUE
 from app.db.models.payment import PaymentStatus
 from app.db.models.prospect_document import DocumentType
+from app.db.models.user import User, UserRole
 from app.repositories.analytics_repository import AnalyticsRepository
 from app.repositories.prospect_repository import ProspectRepository
 from app.services.dashboard_service import DashboardService
@@ -49,6 +51,7 @@ class ExportService:
         admission_stages: list[str] | None = None,
         assigned_to_id: int | None = None,
         course_id: int | None = None,
+        current_user: User | None = None,
     ) -> StreamingResponse:
         """
         Full lead export matching list filters.
@@ -129,8 +132,17 @@ class ExportService:
 
         from app.services.lead_sheet_fields import build_lead_sync_fields
 
+        # Determine if masking is needed (non-admin user)
+        should_mask = current_user is not None and current_user.role != UserRole.admin
+
         rows: list[list[Any]] = []
         for p in prospects:
+            # Check if this prospect needs masking
+            p_stage = getattr(p, "admission_stage", None)
+            if hasattr(p_stage, "value"):
+                p_stage = p_stage.value
+            needs_masking = should_mask and p_stage == "completed"
+
             estimated = Decimal(str(p.estimated_deal_value or 0))
             total_paid = Decimal("0")
             payment_count = 0
@@ -214,21 +226,51 @@ class ExportService:
             )
             extra = build_lead_sync_fields(p, db=db)
 
+            # Apply masking for completed stage (non-admin users)
+            if needs_masking:
+                p_name = MASKED_VALUE
+                p_email = MASKED_VALUE
+                p_phone = MASKED_VALUE
+                p_father_name = MASKED_VALUE
+                p_mother_name = MASKED_VALUE
+                p_specialization = MASKED_VALUE
+                p_university = MASKED_VALUE
+                p_address = MASKED_VALUE
+                p_delivery_address = MASKED_VALUE
+                p_delivery_date = MASKED_VALUE
+                p_estimated = 0
+                p_assigned_name = MASKED_VALUE
+                p_assigned_code = MASKED_VALUE
+            else:
+                p_name = p.name or ""
+                p_email = p.email or ""
+                p_phone = p.phone or ""
+                p_father_name = p.father_name or ""
+                p_mother_name = p.mother_name or ""
+                p_specialization = p.specialization or ""
+                p_university = extra.get("university", "")
+                p_address = p.address or ""
+                p_delivery_address = p.delivery_address or ""
+                p_delivery_date = str(p.delivery_date or "")
+                p_estimated = float(estimated)
+                p_assigned_name = assigned_name
+                p_assigned_code = assigned_code
+
             row: list[Any] = [
                 p.prospect_id,
-                p.name or "",
-                p.email or "",
-                p.phone or "",
+                p_name,
+                p_email,
+                p_phone,
                 str(p.dob or ""),
-                p.father_name or "",
-                p.mother_name or "",
+                p_father_name,
+                p_mother_name,
                 course_name,
-                p.specialization or "",
-                extra.get("university", ""),
-                p.address or "",
-                p.delivery_address or "",
-                str(p.delivery_date or ""),
-                float(estimated),
+                p_specialization,
+                p_university,
+                p_address,
+                p_delivery_address,
+                p_delivery_date,
+                p_estimated,
                 float(total_paid),
                 float(balance),
                 payment_count,
@@ -239,9 +281,9 @@ class ExportService:
                 p.source or "",
                 extra.get("follow_up_date", ""),
                 extra.get("next_follow_up", ""),
-                extra.get("lead_owner", assigned_name),
-                assigned_name,
-                assigned_code,
+                extra.get("lead_owner", p_assigned_name),
+                p_assigned_name,
+                p_assigned_code,
                 extra.get("department", ""),
                 extra.get("designation", ""),
                 extra.get("exam_attended", ""),

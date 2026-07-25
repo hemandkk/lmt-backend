@@ -23,6 +23,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.id_generator import generate_next_code
+from app.core.masking import mask_prospect, mask_prospect_dict
 from app.core.roles import (
     admission_stage_allowed_for_role,
     can_change_admission_stage,
@@ -447,7 +448,7 @@ def list_prospects(
         stage_filter = _parse_admission_stage_filters(
             admission_stage, admission_stages, current_user
         )
-        return ProspectService.list(
+        result = ProspectService.list(
             db,
             page,
             page_size,
@@ -457,6 +458,10 @@ def list_prospects(
             assigned_to_id=assigned_to_id,
             course_id=course_id,
         )
+        # Mask completed-stage prospect data for non-admin users
+        for item in result.get("items", []):
+            mask_prospect(item, current_user)
+        return result
     except ValueError as ex:
         raise HTTPException(status_code=400, detail=str(ex)) from ex
 
@@ -505,6 +510,7 @@ def export_prospects(
             admission_stages=stage_filter,
             assigned_to_id=assigned_to_id,
             course_id=course_id,
+            current_user=current_user,
         )
     except ValueError as ex:
         raise HTTPException(status_code=400, detail=str(ex)) from ex
@@ -519,6 +525,7 @@ def get_prospect(
     try:
         prospect = ProspectService.get(db, prospect_id)
         _ensure_prospect_access(prospect, current_user)
+        mask_prospect(prospect, current_user)
         return prospect
     except ValueError as ex:
         raise HTTPException(status_code=404, detail=str(ex))
@@ -618,7 +625,7 @@ async def update_prospect(
                     status_code=403,
                     detail="You cannot reassign leads.",
                 )
-            return ProspectService.update(
+            result = ProspectService.update(
                 db,
                 prospect_id,
                 payload,
@@ -626,6 +633,8 @@ async def update_prospect(
                 document_files=document_files,
                 receipt_files=receipt_files,
             )
+            mask_prospect(result, current_user)
+            return result
 
         body = await request.json()
         payload = ProspectUpdate.model_validate(body)
@@ -638,9 +647,11 @@ async def update_prospect(
                 status_code=403,
                 detail="You cannot reassign leads.",
             )
-        return ProspectService.update(
+        result = ProspectService.update(
             db, prospect_id, payload, actor_id=actor_id
         )
+        mask_prospect(result, current_user)
+        return result
 
     except HTTPException:
         raise
@@ -802,13 +813,15 @@ async def upload_lead_document(
         raise HTTPException(status_code=400, detail="Invalid document type.") from exc
 
     try:
-        return ProspectService.update(
+        result = ProspectService.update(
             db,
             prospect_id,
             ProspectUpdate(documents=[]),
             actor_id=current_user.id,
             document_files=[(doc_type.value, file)],
         )
+        mask_prospect(result, current_user)
+        return result
     except ValueError as ex:
         raise HTTPException(status_code=404, detail=str(ex))
 
@@ -1006,13 +1019,15 @@ async def add_lead_payment(
         else:
             payment = LeadPaymentInput.model_validate(await request.json())
 
-        return ProspectService.update(
+        result = ProspectService.update(
             db,
             prospect_id,
             ProspectUpdate(payments=[payment], replace_payments=False),
             actor_id=actor_id,
             receipt_files=receipt_files,
         )
+        mask_prospect(result, current_user)
+        return result
     except HTTPException:
         raise
     except ValidationError as ex:
@@ -1077,12 +1092,14 @@ def update_stage(
     try:
         prospect = ProspectService.get(db, prospect_id)
         _ensure_prospect_access(prospect, current_user)
-        return ProspectService.change_stage(
+        result = ProspectService.change_stage(
             db,
             prospect_id,
             payload.stage,
             actor_id=current_user.id,
         )
+        mask_prospect(result, current_user)
+        return result
     except ValueError as ex:
         detail = str(ex)
         status_code = (
@@ -1134,12 +1151,14 @@ def update_admission_stage(
     try:
         prospect = ProspectService.get(db, prospect_id)
         _ensure_prospect_access(prospect, current_user)
-        return ProspectService.change_admission_stage(
+        result = ProspectService.change_admission_stage(
             db,
             prospect_id,
             target,
             actor_id=current_user.id,
         )
+        mask_prospect(result, current_user)
+        return result
     except ValueError as ex:
         detail = str(ex)
         status_code = (
@@ -1194,12 +1213,14 @@ def update_exam(
     try:
         prospect = ProspectService.get(db, prospect_id)
         _ensure_prospect_access(prospect, current_user)
-        return ProspectService.update_exam(
+        result = ProspectService.update_exam(
             db,
             prospect_id,
             attended=payload.attended,
             certified=payload.certified,
             actor_id=current_user.id,
         )
+        mask_prospect(result, current_user)
+        return result
     except ValueError as ex:
         raise HTTPException(status_code=404, detail=str(ex))
