@@ -184,6 +184,8 @@ class PaymentService:
         assigned_to_id: int | None = None,
         prospect_id: int | None = None,
         admission_stages: list[str] | None = None,
+        date_from=None,
+        date_to=None,
     ):
         return self.payment_repo.list(
             skip=skip,
@@ -191,6 +193,8 @@ class PaymentService:
             assigned_to_id=assigned_to_id,
             prospect_id=prospect_id,
             admission_stages=admission_stages,
+            date_from=date_from,
+            date_to=date_to,
         )
 
     def get_payments_by_prospect(self, prospect_id: int):

@@ -134,6 +134,8 @@ def list_payments(
         description="Admin only: filter payments by assignee",
     ),
     prospect_id: int | None = Query(None, alias="prospectId"),
+    date_from: date | None = Query(None, alias="dateFrom"),
+    date_to: date | None = Query(None, alias="dateTo"),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -151,6 +153,8 @@ def list_payments(
         assigned_to_id=scoped_employee_id,
         prospect_id=prospect_id,
         admission_stages=admission_stages,
+        date_from=date_from,
+        date_to=date_to,
     )
     return {"total": total, "items": items}
 

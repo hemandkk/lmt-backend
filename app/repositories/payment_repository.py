@@ -52,10 +52,15 @@ class PaymentRepository:
         assigned_to_id: int | None = None,
         prospect_id: int | None = None,
         admission_stages: list[str] | None = None,
+        date_from=None,
+        date_to=None,
     ) -> tuple[int, list[Payment]]:
         query = (
             self.db.query(Payment)
-            .options(joinedload(Payment.verified_by))
+            .options(
+                joinedload(Payment.verified_by),
+                joinedload(Payment.prospect),
+            )
             .join(Prospect, Prospect.id == Payment.prospect_id)
         )
 
@@ -67,6 +72,12 @@ class PaymentRepository:
 
         if admission_stages:
             query = query.filter(Prospect.admission_stage.in_(admission_stages))
+
+        if date_from is not None:
+            query = query.filter(Payment.payment_date >= date_from)
+
+        if date_to is not None:
+            query = query.filter(Payment.payment_date <= date_to)
 
         total = query.count()
         items = (

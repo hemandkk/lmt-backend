@@ -221,6 +221,12 @@ class PaymentResponse(PaymentBase):
         serialization_alias="verifiedByName",
     )
 
+    prospect_name: Optional[str] = Field(
+        default=None,
+        alias="prospectName",
+        serialization_alias="prospectName",
+    )
+
     created_by: Optional[int] = Field(default=None, alias="createdBy")
 
     created_at: datetime = Field(..., alias="createdAt")
@@ -231,18 +237,25 @@ class PaymentResponse(PaymentBase):
     @classmethod
     def pull_verifier_fields(cls, data: Any, handler):
         verifier_name = None
+        prospect_name = None
         if not isinstance(data, dict):
             verifier = getattr(data, "verified_by", None)
             if verifier is not None:
                 verifier_name = verifier.name or verifier.email
+            prospect = getattr(data, "prospect", None)
+            if prospect is not None:
+                prospect_name = getattr(prospect, "name", None)
         else:
             verifier_name = data.get("verified_by_name") or data.get(
                 "verifiedByName"
             )
+            prospect_name = data.get("prospect_name") or data.get("prospectName")
 
         result = handler(data)
         if verifier_name is not None:
             result.verified_by_name = verifier_name
+        if prospect_name is not None:
+            result.prospect_name = prospect_name
         if result.verification_status is None:
             result.verification_status = PaymentVerificationStatus.not_verified
         return result
