@@ -199,10 +199,12 @@ def visible_admission_stages_for_role(
     Forced admission-stage visibility for list/get.
     None = no force filter (admin / sales users use other scopes).
     """
+    """
     if user.role == UserRole.accountant:
         return ACCOUNTANT_VISIBLE_STAGES
     if user.role == UserRole.processing_team:
         return PROCESSING_VISIBLE_STAGES
+    """
     return None
 
 

@@ -423,15 +423,22 @@ def list_prospects(
     Role-scoped lead list:
     - admin: all (optional filters)
     - employee: assigned leads only
-    - accountant: all leads in certificate_waiting (any assignee)
-    - processing_team: all leads in waiting_result / result_announced
+    - accountant: all leads //in certificate_waiting (any assignee)
+    - processing_team: all leads // in waiting_result / result_announced
     """
     scope_id = _employee_scope_id(current_user)
     if scope_id is not None:
         assigned_to_id = scope_id
 
     # Accountant / processing_team: stage-scoped across all employees
+    """
     if visible_admission_stages_for_role(current_user) is not None:
+        assigned_to_id = None
+    """
+    if current_user.role in (
+        UserRole.accountant,
+        UserRole.processing_team,
+    ):
         assigned_to_id = None
 
     try:
@@ -474,7 +481,15 @@ def export_prospects(
     scope_id = _employee_scope_id(current_user)
     if scope_id is not None:
         assigned_to_id = scope_id
+    """
     if visible_admission_stages_for_role(current_user) is not None:
+        assigned_to_id = None
+    """
+
+    if current_user.role in (
+        UserRole.accountant,
+        UserRole.processing_team,
+    ):
         assigned_to_id = None
 
     try:
