@@ -65,6 +65,8 @@ class ProspectRepository:
         admission_stages: Sequence[str] | None = None,
         assigned_to_id: int | None = None,
         course_id: int | None = None,
+        created_from=None,
+        created_to=None,
     ):
         query = ProspectRepository._filtered_query(
             db,
@@ -74,6 +76,8 @@ class ProspectRepository:
             admission_stages=admission_stages,
             assigned_to_id=assigned_to_id,
             course_id=course_id,
+            created_from=created_from,
+            created_to=created_to,
         )
 
         total = query.count()
@@ -118,6 +122,8 @@ class ProspectRepository:
         admission_stages: Sequence[str] | None = None,
         assigned_to_id: int | None = None,
         course_id: int | None = None,
+        created_from=None,
+        created_to=None,
     ):
         query = db.query(Prospect).options(
             *ProspectRepository._with_relations()
@@ -151,6 +157,12 @@ class ProspectRepository:
             query = query.filter(Prospect.admission_stage == stages[0])
         elif len(stages) > 1:
             query = query.filter(Prospect.admission_stage.in_(stages))
+
+        if created_from is not None:
+            query = query.filter(Prospect.created_at >= created_from)
+
+        if created_to is not None:
+            query = query.filter(Prospect.created_at <= created_to)
 
         return query
 

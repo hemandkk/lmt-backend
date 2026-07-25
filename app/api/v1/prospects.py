@@ -1,4 +1,5 @@
 import json
+from datetime import date
 from typing import Any, Optional
 
 from fastapi import (
@@ -419,6 +420,8 @@ def list_prospects(
     admission_stages: str | None = Query(None, alias="admissionStages"),
     course_id: int | None = Query(None, alias="courseId"),
     assigned_to_id: int | None = Query(None, alias="assignedToId"),
+    created_from: date | None = Query(None, alias="createdFrom"),
+    created_to: date | None = Query(None, alias="createdTo"),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -457,6 +460,8 @@ def list_prospects(
             admission_stages=stage_filter,
             assigned_to_id=assigned_to_id,
             course_id=course_id,
+            created_from=created_from,
+            created_to=created_to,
         )
         # Mask completed-stage prospect data for non-admin users
         for item in result.get("items", []):

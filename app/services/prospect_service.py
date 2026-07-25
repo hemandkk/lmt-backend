@@ -390,6 +390,8 @@ class ProspectService:
         admission_stages: list[str] | None = None,
         assigned_to_id: int | None = None,
         course_id: int | None = None,
+        created_from=None,
+        created_to=None,
     ):
         parsed_stages: list[str] | None = None
         if admission_stages:
@@ -408,6 +410,8 @@ class ProspectService:
             admission_stages=parsed_stages,
             assigned_to_id=assigned_to_id,
             course_id=course_id,
+            created_from=created_from,
+            created_to=created_to,
         )
         return {
             "items": items,
