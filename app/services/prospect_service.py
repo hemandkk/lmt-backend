@@ -537,6 +537,9 @@ class ProspectService:
         if not prospect:
             raise ValueError("Prospect not found.")
 
+        prospect_code = prospect.prospect_id
+        prospect_pk = prospect.id
+
         for document in list(prospect.documents or []):
             FileStorage.delete_file(document.file_url)
         for payment in list(prospect.payments or []):
@@ -554,6 +557,15 @@ class ProspectService:
         )
 
         ProspectRepository.delete(db, prospect)
+
+        from app.services.google_sheets_service import GoogleSheetsService
+
+        GoogleSheetsService.sync_prospect_delete(
+            db,
+            prospect_code=prospect_code,
+            prospect_pk=prospect_pk,
+            actor_id=actor_id,
+        )
 
     @staticmethod
     def assign(

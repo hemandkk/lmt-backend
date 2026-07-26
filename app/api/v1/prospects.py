@@ -29,6 +29,7 @@ from app.core.roles import (
     admission_stage_allowed_for_role,
     admission_stage_denied_detail,
     can_change_admission_stage,
+    can_edit_lead,
     intersect_admission_filters,
     is_sales_user,
     prospect_visible_to_user,
@@ -739,7 +740,11 @@ async def upload_prospect_document(
     Listing more-action: upload a document via multipart.
     Accepts docType/documentType/document_type + file/document/documents.
     """
-    deny_if_cannot_mutate_leads(current_user)
+    if not can_edit_lead(current_user):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You do not have permission to upload documents.",
+        )
     try:
         prospect = ProspectService.get(db, prospect_id)
         _ensure_prospect_access(prospect, current_user)
@@ -823,7 +828,11 @@ async def upload_lead_document(
     current_user: User = Depends(get_current_user),
 ):
     """List more-action / edit: upload or replace a single document type."""
-    deny_if_cannot_mutate_leads(current_user)
+    if not can_edit_lead(current_user):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You do not have permission to upload documents.",
+        )
     try:
         prospect = ProspectService.get(db, prospect_id)
         _ensure_prospect_access(prospect, current_user)

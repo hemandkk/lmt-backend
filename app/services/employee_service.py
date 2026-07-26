@@ -402,6 +402,7 @@ class EmployeeService:
             .scalar()
             or 0
         )
+        transferred_ids: list[int] = []
 
         if lead_count > 0:
             if transfer_to_id is None:
@@ -419,6 +420,12 @@ class EmployeeService:
                 raise ValueError("Cannot transfer leads to the same employee.")
 
             # Bulk-transfer all leads
+            transferred_ids = [
+                row[0]
+                for row in db.query(Prospect.id)
+                .filter(Prospect.assigned_to_id == user.id)
+                .all()
+            ]
             db.query(Prospect).filter(
                 Prospect.assigned_to_id == user.id
             ).update(
@@ -446,6 +453,13 @@ class EmployeeService:
 
         user.is_active = False
         db.commit()
+
+        if transferred_ids:
+            from app.services.google_sheets_service import GoogleSheetsService
+
+            GoogleSheetsService.sync_prospects_by_ids(
+                db, transferred_ids, actor_id=actor_id
+            )
 
         ActivityLogService.log(
             db,

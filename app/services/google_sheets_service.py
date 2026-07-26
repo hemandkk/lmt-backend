@@ -107,10 +107,14 @@ class GoogleSheetsService:
             return False
         if not settings.GOOGLE_SHEETS_SPREADSHEET_ID:
             return False
-        return bool(
-            settings.GOOGLE_SERVICE_ACCOUNT_FILE
-            or settings.GOOGLE_SERVICE_ACCOUNT_JSON
-        )
+        if settings.GOOGLE_SERVICE_ACCOUNT_JSON:
+            return True
+        path = (settings.GOOGLE_SERVICE_ACCOUNT_FILE or "").strip()
+        if not path:
+            return False
+        from pathlib import Path
+
+        return Path(path).is_file()
 
     @staticmethod
     def _load_credentials():
@@ -120,13 +124,20 @@ class GoogleSheetsService:
             return service_account.Credentials.from_service_account_info(
                 info, scopes=SCOPES
             )
-        if settings.GOOGLE_SERVICE_ACCOUNT_FILE:
-            return service_account.Credentials.from_service_account_file(
-                settings.GOOGLE_SERVICE_ACCOUNT_FILE,
-                scopes=SCOPES,
+        path = (settings.GOOGLE_SERVICE_ACCOUNT_FILE or "").strip()
+        if not path:
+            raise GoogleSheetsSyncError(
+                "GOOGLE_SERVICE_ACCOUNT_FILE or GOOGLE_SERVICE_ACCOUNT_JSON "
+                "must be set."
             )
-        raise GoogleSheetsSyncError(
-            "Google service account credentials are not configured."
+        from pathlib import Path
+
+        if not Path(path).is_file():
+            raise GoogleSheetsSyncError(
+                f"Google service account file not found: {path}"
+            )
+        return service_account.Credentials.from_service_account_file(
+            path, scopes=SCOPES
         )
 
     @staticmethod
@@ -341,6 +352,50 @@ class GoogleSheetsService:
         return GoogleSheetsService._worksheet_range(cell_range)
 
     @staticmethod
+    def _clear_row(service, row_number: int) -> str:
+        """Clear a lead row (keeps sheet structure; Lead ID column emptied)."""
+        spreadsheet_id = settings.GOOGLE_SHEETS_SPREADSHEET_ID
+        cell_range = f"A{row_number}:{LAST_COLUMN_LETTER}{row_number}"
+        service.spreadsheets().values().clear(
+            spreadsheetId=spreadsheet_id,
+            range=GoogleSheetsService._worksheet_range(cell_range),
+            body={},
+        ).execute()
+        return GoogleSheetsService._worksheet_range(cell_range)
+
+    @staticmethod
+    def remove_lead_row(prospect_id_code: str) -> Optional[str]:
+        """
+        Remove (clear) the sheet row for a lead ID after lead delete.
+        Returns cleared range, or None if row not found / not configured.
+        """
+        if not GoogleSheetsService.is_configured():
+            return None
+        lead_id = str(prospect_id_code).strip()
+        if not lead_id:
+            return None
+        _, _, HttpError = _import_google()
+        attempts = max(1, settings.GOOGLE_SHEETS_MAX_RETRIES)
+        backoff = settings.GOOGLE_SHEETS_RETRY_BACKOFF_SECONDS
+        last_error: Exception | None = None
+        for attempt in range(1, attempts + 1):
+            try:
+                service = GoogleSheetsService._sheets_client()
+                existing_row = GoogleSheetsService._find_row_number(
+                    service, lead_id
+                )
+                if existing_row is None:
+                    return None
+                return GoogleSheetsService._clear_row(service, existing_row)
+            except Exception as ex:
+                last_error = ex
+                if attempt < attempts:
+                    time.sleep(backoff * attempt)
+        raise GoogleSheetsSyncError(
+            f"Failed to remove lead {lead_id} from Google Sheets: {last_error}"
+        )
+
+    @staticmethod
     def upsert_lead_row(prospect: Prospect, db: Session | None = None) -> str:
         """
         Create or update the sheet row for this lead (matched by Lead ID).
@@ -515,3 +570,68 @@ class GoogleSheetsService:
         return GoogleSheetsService.sync_prospect(
             db, prospect, actor_id=actor_id
         )
+
+    @staticmethod
+    def sync_prospects_by_ids(
+        db: Session,
+        prospect_ids: list[int],
+        actor_id: Optional[int] = None,
+    ) -> None:
+        """Upsert many prospects (e.g. after bulk reassignment)."""
+        for pid in prospect_ids:
+            GoogleSheetsService.sync_prospect_by_id(
+                db, pid, actor_id=actor_id
+            )
+
+    @staticmethod
+    def sync_prospect_delete(
+        db: Session,
+        prospect_code: str,
+        prospect_pk: int | None = None,
+        actor_id: Optional[int] = None,
+    ) -> None:
+        """Clear sheet row when a lead is deleted. Never raises."""
+        if not GoogleSheetsService.is_configured():
+            ActivityLogService.log(
+                db,
+                action="sheets_sync_skipped",
+                entity_type="prospect",
+                entity_id=prospect_pk,
+                description=(
+                    f"Google Sheets delete skipped for {prospect_code} "
+                    "(disabled or missing credentials)."
+                ),
+                user_id=actor_id,
+                prospect_id=prospect_pk,
+            )
+            return
+        try:
+            cleared = GoogleSheetsService.remove_lead_row(prospect_code)
+            ActivityLogService.log(
+                db,
+                action="sheets_sync_deleted",
+                entity_type="prospect",
+                entity_id=prospect_pk,
+                description=(
+                    f"Lead {prospect_code} cleared from Google Sheets"
+                    + (f" ({cleared})" if cleared else " (row not found).")
+                ),
+                user_id=actor_id,
+                prospect_id=prospect_pk,
+            )
+        except Exception as ex:
+            ActivityLogService.log(
+                db,
+                action="sheets_sync_failed",
+                entity_type="prospect",
+                entity_id=prospect_pk,
+                description=(
+                    f"Lead {prospect_code} Google Sheets delete failed: {ex}"
+                ),
+                user_id=actor_id,
+                prospect_id=prospect_pk,
+                meta_data=json.dumps({"error": str(ex)}),
+            )
+            logger.exception(
+                "Google Sheets delete failed for lead %s", prospect_code
+            )
