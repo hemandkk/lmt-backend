@@ -10,6 +10,7 @@ from app.core.roles import (
     can_manage_expenses,
     can_manage_payment_requests,
     can_mutate_leads,
+    can_mutate_payments,
     can_verify_payments,
     can_view_all_leads,
     can_view_any_payment,
@@ -206,6 +207,22 @@ def deny_if_cannot_mutate_leads(current_user: User) -> None:
             status_code=status.HTTP_403_FORBIDDEN,
             detail="You do not have permission to modify leads.",
         )
+
+
+def deny_if_cannot_mutate_payments(current_user: User) -> None:
+    if not can_mutate_payments(current_user):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You do not have permission to add or update payments.",
+        )
+
+
+def require_payment_mutator(
+    current_user: User = Depends(get_current_user),
+) -> User:
+    """Admin, sales, accountant, or processing_team may add/update payments."""
+    deny_if_cannot_mutate_payments(current_user)
+    return current_user
 
 
 def require_lead_viewer(

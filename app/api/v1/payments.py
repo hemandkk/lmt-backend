@@ -21,6 +21,7 @@ from app.db.session import get_db
 from app.dependencies.auth import get_current_user
 from app.dependencies.permissions import (
     deny_if_cannot_mutate_leads,
+    deny_if_cannot_mutate_payments,
     ensure_payment_access,
     ensure_prospect_access,
     require_payment_verifier,
@@ -65,7 +66,7 @@ async def create_payment(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    deny_if_cannot_mutate_leads(current_user)
+    deny_if_cannot_mutate_payments(current_user)
     content_type = (request.headers.get("content-type") or "").lower()
     receipt_file: UploadFile | None = None
 
@@ -238,7 +239,7 @@ def update_payment(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    deny_if_cannot_mutate_leads(current_user)
+    deny_if_cannot_mutate_payments(current_user)
     existing = PaymentService(db).get_payment(payment_id)
     if not existing:
         raise HTTPException(status_code=404, detail="Payment not found.")
@@ -276,7 +277,7 @@ def upload_receipt(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    deny_if_cannot_mutate_leads(current_user)
+    deny_if_cannot_mutate_payments(current_user)
     existing = PaymentService(db).get_payment(payment_id)
     if not existing:
         raise HTTPException(status_code=404, detail="Payment not found.")

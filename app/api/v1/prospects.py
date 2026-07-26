@@ -27,8 +27,8 @@ from app.core.id_generator import generate_next_code
 from app.core.masking import mask_prospect, mask_prospect_dict
 from app.core.roles import (
     admission_stage_allowed_for_role,
+    admission_stage_denied_detail,
     can_change_admission_stage,
-    can_mutate_leads,
     intersect_admission_filters,
     is_sales_user,
     prospect_visible_to_user,
@@ -41,6 +41,7 @@ from app.db.session import get_db
 from app.dependencies.auth import get_current_user, get_optional_user
 from app.dependencies.permissions import (
     deny_if_cannot_mutate_leads,
+    deny_if_cannot_mutate_payments,
     require_admin,
     require_lead_editor,
     require_lead_viewer,
@@ -598,6 +599,21 @@ async def create_prospect(
         raise HTTPException(status_code=400, detail=str(ex))
 
 
+def _assert_admission_stage_change_allowed(
+    current_user: User,
+    payload,
+) -> None:
+    """Block forbidden admissionStage values on create/update payloads."""
+    stage = getattr(payload, "admission_stage", None)
+    if stage is None:
+        return
+    if not admission_stage_allowed_for_role(current_user, stage):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=admission_stage_denied_detail(current_user, stage),
+        )
+
+
 @router.put("/{prospect_id}", response_model=ProspectResponse)
 async def update_prospect(
     prospect_id: int,
@@ -620,6 +636,7 @@ async def update_prospect(
             payload, document_files, receipt_files = _parse_multipart_lead(
                 form, ProspectUpdate
             )
+            _assert_admission_stage_change_allowed(current_user, payload)
             # Non-admin sales users cannot reassign leads to someone else
             if (
                 is_sales_user(current_user)
@@ -643,6 +660,7 @@ async def update_prospect(
 
         body = await request.json()
         payload = ProspectUpdate.model_validate(body)
+        _assert_admission_stage_change_allowed(current_user, payload)
         if (
             is_sales_user(current_user)
             and payload.assigned_to_id is not None
@@ -969,6 +987,8 @@ async def add_lead_payment(
     """
     from app.schemas.prospect import LeadPaymentInput
 
+    deny_if_cannot_mutate_payments(current_user)
+
     try:
         prospect = ProspectService.get(db, prospect_id)
         _ensure_prospect_access(prospect, current_user)
@@ -1128,8 +1148,9 @@ def update_admission_stage(
     """
     Listing-page update for admission funnel stage.
     Does not change CRM `stage` (new/won/…).
-    Restricted stages (waiting_result, result_announced, completed, delivered)
-    require admin or processing_team. Accountant cannot change any stage.
+    Accountant may change stages like sales staff, but not 'completed'.
+    Restricted stages (waiting_result, result_announced, delivered)
+    require admin or processing_team.
     """
     if not can_change_admission_stage(current_user):
         raise HTTPException(
@@ -1147,10 +1168,7 @@ def update_admission_stage(
     if not admission_stage_allowed_for_role(current_user, target):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail=(
-                f"Only admin or processing_team may set admission stage "
-                f"'{target.value}'."
-            ),
+            detail=admission_stage_denied_detail(current_user, target),
         )
 
     try:

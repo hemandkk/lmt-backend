@@ -147,16 +147,33 @@ def can_mutate_leads(user: User) -> bool:
     return user.role in (UserRole.admin, *SALES_ROLES)
 
 
+def can_mutate_payments(user: User) -> bool:
+    """Add/update lead payments (and receipt upload)."""
+    return user.role in (
+        UserRole.admin,
+        *SALES_ROLES,
+        UserRole.accountant,
+        UserRole.processing_team,
+    )
+
+
 def can_change_admission_stage(user: User) -> bool:
+    """Admin, sales, processing_team, and accountant may change admission stage."""
     return user.role in (
         UserRole.admin,
         *SALES_ROLES,
         UserRole.processing_team,
+        UserRole.accountant,
     )
 
 
 def can_set_restricted_admission_stage(user: User) -> bool:
     return user.role in (UserRole.admin, UserRole.processing_team)
+
+
+def can_set_completed_admission_stage(user: User) -> bool:
+    """Completed stage: admin and sales only (not accountant / processing)."""
+    return user.role in (UserRole.admin, *SALES_ROLES)
 
 
 def can_verify_payments(user: User) -> bool:
@@ -193,8 +210,12 @@ def can_view_all_leads(user: User) -> bool:
 
 
 def can_view_any_payment(user: User) -> bool:
-    """Admin and accountant can view payments across all employees."""
-    return user.role in (UserRole.admin, UserRole.accountant)
+    """Admin, accountant, processing_team can view payments across all employees."""
+    return user.role in (
+        UserRole.admin,
+        UserRole.accountant,
+        UserRole.processing_team,
+    )
 
 
 def can_edit_lead(user: User) -> bool:
@@ -218,10 +239,24 @@ def admission_stage_allowed_for_role(
     if not can_change_admission_stage(user):
         return False
     if stage in COMPLETED_ONLY_STAGES:
-        return user.role in (UserRole.admin, *SALES_ROLES)
+        return can_set_completed_admission_stage(user)
     if stage in RESTRICTED_ADMISSION_STAGES:
         return can_set_restricted_admission_stage(user)
     return True
+
+
+def admission_stage_denied_detail(user: User, stage: AdmissionStage) -> str:
+    """Human-readable reason when a stage set is forbidden."""
+    if stage in COMPLETED_ONLY_STAGES:
+        return (
+            "Only admin or sales staff may set admission stage 'completed'."
+        )
+    if stage in RESTRICTED_ADMISSION_STAGES:
+        return (
+            f"Only admin or processing_team may set admission stage "
+            f"'{stage.value}'."
+        )
+    return "You do not have permission to change admission stage."
 
 
 def visible_admission_stages_for_role(
