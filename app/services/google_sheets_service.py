@@ -158,6 +158,117 @@ class GoogleSheetsService:
         return f"{safe}!{cell_range}"
 
     @staticmethod
+    def _get_sheet_id(service) -> int:
+        """Resolve numeric sheetId for the configured worksheet name."""
+        spreadsheet_id = settings.GOOGLE_SHEETS_SPREADSHEET_ID
+        meta = (
+            service.spreadsheets()
+            .get(
+                spreadsheetId=spreadsheet_id,
+                fields="sheets.properties(sheetId,title)",
+            )
+            .execute()
+        )
+        target = (settings.GOOGLE_SHEETS_WORKSHEET_NAME or "Leads").strip()
+        for sheet in meta.get("sheets") or []:
+            props = sheet.get("properties") or {}
+            if props.get("title") == target:
+                return int(props["sheetId"])
+        # Fallback: first sheet
+        first = (meta.get("sheets") or [{}])[0].get("properties") or {}
+        if "sheetId" not in first:
+            raise GoogleSheetsSyncError(
+                f"Worksheet '{target}' not found in spreadsheet."
+            )
+        return int(first["sheetId"])
+
+    @staticmethod
+    def _format_columns(service) -> None:
+        """
+        Make headings readable and stop values spilling into adjacent cells:
+        - wrap text on header row
+        - auto-resize all data columns to fit content
+        - clip overflow on data cells (no visual overlap into next column)
+        """
+        spreadsheet_id = settings.GOOGLE_SHEETS_SPREADSHEET_ID
+        sheet_id = GoogleSheetsService._get_sheet_id(service)
+        col_count = len(SHEET_HEADERS)
+
+        requests = [
+            # Header row: wrap long titles, bold, freeze
+            {
+                "repeatCell": {
+                    "range": {
+                        "sheetId": sheet_id,
+                        "startRowIndex": 0,
+                        "endRowIndex": 1,
+                        "startColumnIndex": 0,
+                        "endColumnIndex": col_count,
+                    },
+                    "cell": {
+                        "userEnteredFormat": {
+                            "wrapStrategy": "WRAP",
+                            "verticalAlignment": "MIDDLE",
+                            "textFormat": {"bold": True},
+                        }
+                    },
+                    "fields": (
+                        "userEnteredFormat.wrapStrategy,"
+                        "userEnteredFormat.verticalAlignment,"
+                        "userEnteredFormat.textFormat.bold"
+                    ),
+                }
+            },
+            # Data rows: clip so long text does not overflow into next cell
+            {
+                "repeatCell": {
+                    "range": {
+                        "sheetId": sheet_id,
+                        "startRowIndex": 1,
+                        "startColumnIndex": 0,
+                        "endColumnIndex": col_count,
+                    },
+                    "cell": {
+                        "userEnteredFormat": {
+                            "wrapStrategy": "CLIP",
+                            "verticalAlignment": "TOP",
+                        }
+                    },
+                    "fields": (
+                        "userEnteredFormat.wrapStrategy,"
+                        "userEnteredFormat.verticalAlignment"
+                    ),
+                }
+            },
+            # Auto-fit column widths to header + content
+            {
+                "autoResizeDimensions": {
+                    "dimensions": {
+                        "sheetId": sheet_id,
+                        "dimension": "COLUMNS",
+                        "startIndex": 0,
+                        "endIndex": col_count,
+                    }
+                }
+            },
+            # Keep header visible while scrolling
+            {
+                "updateSheetProperties": {
+                    "properties": {
+                        "sheetId": sheet_id,
+                        "gridProperties": {"frozenRowCount": 1},
+                    },
+                    "fields": "gridProperties.frozenRowCount",
+                }
+            },
+        ]
+
+        service.spreadsheets().batchUpdate(
+            spreadsheetId=spreadsheet_id,
+            body={"requests": requests},
+        ).execute()
+
+    @staticmethod
     def _format_value(value: Any) -> str:
         if value is None:
             return ""
@@ -287,7 +398,7 @@ class GoogleSheetsService:
 
     @staticmethod
     def _ensure_header_row(service) -> None:
-        """Write/refresh header row so newly added columns are always present."""
+        """Write/refresh header row and apply column width / wrap formatting."""
         spreadsheet_id = settings.GOOGLE_SHEETS_SPREADSHEET_ID
         service.spreadsheets().values().update(
             spreadsheetId=spreadsheet_id,
@@ -295,6 +406,13 @@ class GoogleSheetsService:
             valueInputOption="USER_ENTERED",
             body={"values": [SHEET_HEADERS]},
         ).execute()
+        try:
+            GoogleSheetsService._format_columns(service)
+        except Exception:
+            # Formatting is best-effort; never block lead sync on layout failure
+            logger.exception(
+                "Google Sheets column formatting failed (values still synced)."
+            )
 
     @staticmethod
     def _find_row_number(service, lead_id: str) -> Optional[int]:
