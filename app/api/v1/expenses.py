@@ -139,6 +139,8 @@ def list_expenses(
     page_size: int = Query(20, alias="pageSize", ge=1, le=200),
     date_from: date | None = Query(None, alias="dateFrom"),
     date_to: date | None = Query(None, alias="dateTo"),
+    state_id: int | None = Query(None, alias="stateId"),
+    branch_id: int | None = Query(None, alias="branchId"),
     search: str | None = Query(None),
     expense_type: str | None = Query(
         None,
@@ -153,6 +155,10 @@ def list_expenses(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_expense_manager),
 ):
+    from app.core.geo_scope import merge_geo_query_params
+    state_id, branch_id = merge_geo_query_params(
+        current_user, state_id, branch_id
+    )
     return ExpenseService(db).list(
         page=page,
         page_size=page_size,
@@ -161,6 +167,8 @@ def list_expenses(
         search=search,
         expense_type=_parse_expense_type(expense_type),
         employee_id=employee_id,
+        state_id=state_id,
+        branch_id=branch_id,
     )
 
 
@@ -171,7 +179,7 @@ def get_expense(
     current_user: User = Depends(require_expense_manager),
 ):
     try:
-        return ExpenseService(db).get(expense_id)
+        return ExpenseService(db).get(expense_id, viewer=current_user)
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
 
@@ -228,6 +236,7 @@ async def update_expense(
             payload,
             receipt_file=receipt_file,
             invoice_file=invoice_file,
+            viewer=current_user,
         )
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc

@@ -102,10 +102,24 @@ class ExpenseService:
         created = self.repo.create(expense)
         return self._to_response(self.repo.get_by_id(created.id) or created)
 
-    def get(self, expense_id: int) -> ExpenseResponse:
+    def _ensure_geo_access(self, expense: Expense, viewer) -> None:
+        from app.core.geo_scope import related_user_in_geo_scope
+
+        if viewer is None:
+            return
+        if not related_user_in_geo_scope(
+            viewer,
+            expense.employee,
+            expense.requester,
+            expense.creator,
+        ):
+            raise ValueError("Expense not found.")
+
+    def get(self, expense_id: int, viewer=None) -> ExpenseResponse:
         expense = self.repo.get_by_id(expense_id)
         if not expense:
             raise ValueError("Expense not found.")
+        self._ensure_geo_access(expense, viewer)
         return self._to_response(expense)
 
     def list(
@@ -117,8 +131,10 @@ class ExpenseService:
         search: str | None = None,
         expense_type: ExpenseCategory | None = None,
         employee_id: int | None = None,
+        state_id: int | None = None,
+        branch_id: int | None = None,
     ) -> dict:
-        """All accountants and admins see every expense (no user scope)."""
+        """Scoped by assignee geo when stateId/branchId apply (admin filters)."""
         skip = (page - 1) * page_size
         total, items = self.repo.list(
             skip=skip,
@@ -128,6 +144,8 @@ class ExpenseService:
             search=search,
             expense_type=expense_type,
             employee_id=employee_id,
+            state_id=state_id,
+            branch_id=branch_id,
         )
         return {
             "total": total,
@@ -140,10 +158,12 @@ class ExpenseService:
         payload: ExpenseUpdate,
         receipt_file: UploadFile | None = None,
         invoice_file: UploadFile | None = None,
+        viewer=None,
     ) -> ExpenseResponse:
         expense = self.repo.get_by_id(expense_id)
         if not expense:
             raise ValueError("Expense not found.")
+        self._ensure_geo_access(expense, viewer)
 
         data = payload.model_dump(exclude_unset=True)
         for key, value in data.items():

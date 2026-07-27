@@ -57,7 +57,11 @@ class ExpenseRepository:
         search: str | None = None,
         expense_type: Optional[ExpenseCategory] = None,
         employee_id: int | None = None,
+        state_id: int | None = None,
+        branch_id: int | None = None,
     ) -> tuple[int, list[Expense]]:
+        from app.core.geo_scope import apply_related_user_geo
+
         query = self.db.query(Expense).options(
             joinedload(Expense.creator),
             joinedload(Expense.requester),
@@ -82,6 +86,16 @@ class ExpenseRepository:
             query = query.filter(Expense.expense_type == expense_type)
         if employee_id is not None:
             query = query.filter(Expense.employee_id == employee_id)
+
+        # Geo via employee (incentive/salary), else requester, else creator
+        query = apply_related_user_geo(
+            query,
+            Expense.employee_id,
+            Expense.requested_by_id,
+            Expense.created_by_id,
+            state_id=state_id,
+            branch_id=branch_id,
+        )
 
         total = query.count()
         items = (

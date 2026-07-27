@@ -30,6 +30,7 @@ from app.core.roles import (
     admission_stage_denied_detail,
     can_change_admission_stage,
     can_edit_lead,
+    can_mutate_leads,
     intersect_admission_filters,
     is_sales_user,
     prospect_visible_to_user,

@@ -93,10 +93,11 @@ class PaymentRequestService:
         created = self.repo.create(row)
         return self._to_response(self.repo.get_by_id(created.id) or created)
 
-    def get(self, request_id: int) -> PaymentRequestResponse:
+    def get(self, request_id: int, viewer=None) -> PaymentRequestResponse:
         row = self.repo.get_by_id(request_id)
         if not row:
             raise ValueError("Payment request not found.")
+        self._ensure_geo_access(row, viewer)
         return self._to_response(row)
 
     def list(
@@ -107,8 +108,10 @@ class PaymentRequestService:
         date_from=None,
         date_to=None,
         search: str | None = None,
+        state_id: int | None = None,
+        branch_id: int | None = None,
     ) -> dict:
-        """All accountants and admins see every payment request (no user scope)."""
+        """Scoped by related-user geo when stateId/branchId apply."""
         skip = (page - 1) * page_size
         total, items = self.repo.list(
             skip=skip,
@@ -117,20 +120,36 @@ class PaymentRequestService:
             date_from=date_from,
             date_to=date_to,
             search=search,
+            state_id=state_id,
+            branch_id=branch_id,
         )
         return {
             "total": total,
             "items": [self._to_response(item) for item in items],
         }
 
+    def _ensure_geo_access(self, row: PaymentRequest, viewer) -> None:
+        from app.core.geo_scope import related_user_in_geo_scope
+
+        if viewer is None:
+            return
+        if not related_user_in_geo_scope(
+            viewer,
+            row.employee,
+            row.requested_by,
+        ):
+            raise ValueError("Payment request not found.")
+
     def update(
         self,
         request_id: int,
         payload: PaymentRequestUpdate,
+        viewer=None,
     ) -> PaymentRequestResponse:
         row = self.repo.get_by_id(request_id)
         if not row:
             raise ValueError("Payment request not found.")
+        self._ensure_geo_access(row, viewer)
         if row.status != PaymentRequestStatus.requested:
             raise ValueError(
                 "Only requests in 'requested' status can be edited."
@@ -180,6 +199,7 @@ class PaymentRequestService:
         self,
         request_id: int,
         actor_id: int,
+        viewer=None,
     ) -> PaymentRequestResponse:
         """
         Accountant verifies admin payment → status approved + auto expense.
@@ -187,6 +207,7 @@ class PaymentRequestService:
         row = self.repo.get_by_id(request_id)
         if not row:
             raise ValueError("Payment request not found.")
+        self._ensure_geo_access(row, viewer)
         if row.status != PaymentRequestStatus.payment_done:
             raise ValueError(
                 "Only requests with status 'payment_done' can be verified."

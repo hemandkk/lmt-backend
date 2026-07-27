@@ -107,10 +107,17 @@ def list_payment_requests(
     ),
     date_from: date | None = Query(None, alias="dateFrom"),
     date_to: date | None = Query(None, alias="dateTo"),
+    state_id: int | None = Query(None, alias="stateId"),
+    branch_id: int | None = Query(None, alias="branchId"),
     search: str | None = Query(None),
     db: Session = Depends(get_db),
     current_user: User = Depends(require_payment_request_manager),
 ):
+    from app.core.geo_scope import merge_geo_query_params
+
+    state_id, branch_id = merge_geo_query_params(
+        current_user, state_id, branch_id
+    )
     return PaymentRequestService(db).list(
         page=page,
         page_size=page_size,
@@ -118,6 +125,8 @@ def list_payment_requests(
         date_from=date_from,
         date_to=date_to,
         search=search,
+        state_id=state_id,
+        branch_id=branch_id,
     )
 
 
@@ -128,7 +137,7 @@ def get_payment_request(
     current_user: User = Depends(require_payment_request_manager),
 ):
     try:
-        return PaymentRequestService(db).get(request_id)
+        return PaymentRequestService(db).get(request_id, viewer=current_user)
     except ValueError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
 
@@ -141,7 +150,9 @@ def update_payment_request(
     current_user: User = Depends(require_payment_request_manager),
 ):
     try:
-        return PaymentRequestService(db).update(request_id, payload)
+        return PaymentRequestService(db).update(
+            request_id, payload, viewer=current_user
+        )
     except ValueError as exc:
         detail = str(exc)
         code = 404 if "not found" in detail.lower() else 400
@@ -215,7 +226,7 @@ def verify_payment_request(
     """
     try:
         return PaymentRequestService(db).verify(
-            request_id, actor_id=current_user.id
+            request_id, actor_id=current_user.id, viewer=current_user
         )
     except ValueError as exc:
         detail = str(exc)
