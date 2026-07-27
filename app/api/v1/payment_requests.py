@@ -91,9 +91,15 @@ def create_payment_request(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_payment_request_manager),
 ):
-    return PaymentRequestService(db).create(
-        payload, actor_id=current_user.id
-    )
+    try:
+        return PaymentRequestService(db).create(
+            payload, actor_id=current_user.id, actor=current_user
+        )
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=str(exc),
+        ) from exc
 
 
 @router.get("", response_model=PaymentRequestListResponse)

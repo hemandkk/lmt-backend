@@ -25,6 +25,8 @@ class PaymentRequestRepository:
                 joinedload(PaymentRequest.paid_by),
                 joinedload(PaymentRequest.verified_by),
                 joinedload(PaymentRequest.employee),
+                joinedload(PaymentRequest.state),
+                joinedload(PaymentRequest.branch),
                 joinedload(PaymentRequest.expense),
             )
             .filter(PaymentRequest.id == request_pk)
@@ -49,13 +51,15 @@ class PaymentRequestRepository:
         state_id: int | None = None,
         branch_id: int | None = None,
     ) -> tuple[int, list[PaymentRequest]]:
-        from app.core.geo_scope import apply_related_user_geo
+        from app.core.geo_scope import apply_entity_geo_filter
 
         query = self.db.query(PaymentRequest).options(
             joinedload(PaymentRequest.requested_by),
             joinedload(PaymentRequest.paid_by),
             joinedload(PaymentRequest.verified_by),
             joinedload(PaymentRequest.employee),
+            joinedload(PaymentRequest.state),
+            joinedload(PaymentRequest.branch),
             joinedload(PaymentRequest.expense),
         )
 
@@ -85,11 +89,14 @@ class PaymentRequestRepository:
                 | (PaymentRequest.transaction_id.ilike(like))
             )
 
-        # Geo via employee (salary/incentive), else requester
-        query = apply_related_user_geo(
+        query = apply_entity_geo_filter(
             query,
-            PaymentRequest.employee_id,
-            PaymentRequest.requested_by_id,
+            state_col=PaymentRequest.state_id,
+            branch_col=PaymentRequest.branch_id,
+            user_id_columns=(
+                PaymentRequest.employee_id,
+                PaymentRequest.requested_by_id,
+            ),
             state_id=state_id,
             branch_id=branch_id,
         )

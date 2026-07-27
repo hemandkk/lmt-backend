@@ -81,6 +81,18 @@ class PaymentRequest(TimestampMixin, Base):
         index=True,
     )
 
+    # Explicit geo for office / admin-created rows without an employee
+    state_id: Mapped[int | None] = mapped_column(
+        ForeignKey("states.id", ondelete="RESTRICT"),
+        nullable=True,
+        index=True,
+    )
+    branch_id: Mapped[int | None] = mapped_column(
+        ForeignKey("branches.id", ondelete="RESTRICT"),
+        nullable=True,
+        index=True,
+    )
+
     status: Mapped[PaymentRequestStatus] = mapped_column(
         Enum(
             PaymentRequestStatus,
@@ -130,6 +142,8 @@ class PaymentRequest(TimestampMixin, Base):
     paid_by = relationship("User", foreign_keys=[paid_by_id])
     verified_by = relationship("User", foreign_keys=[verified_by_id])
     employee = relationship("User", foreign_keys=[employee_id])
+    state = relationship("State", foreign_keys=[state_id])
+    branch = relationship("Branch", foreign_keys=[branch_id])
     expense = relationship(
         "Expense",
         back_populates="payment_request",

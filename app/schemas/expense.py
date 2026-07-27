@@ -42,6 +42,15 @@ class ExpenseBase(BaseModel):
         alias="employeeId",
         description="Required when expenseType is incentive",
     )
+    state_id: Optional[int] = Field(
+        default=None,
+        alias="stateId",
+        description="Required for admin office expenses without employee",
+    )
+    branch_id: Optional[int] = Field(
+        default=None,
+        alias="branchId",
+    )
 
 
 class ExpenseCreate(ExpenseBase):
@@ -65,6 +74,8 @@ class ExpenseUpdate(BaseModel):
         max_length=100,
         alias="installmentNumber",
     )
+    state_id: Optional[int] = Field(default=None, alias="stateId")
+    branch_id: Optional[int] = Field(default=None, alias="branchId")
 
 
 class ExpenseResponse(ExpenseBase):
@@ -74,6 +85,16 @@ class ExpenseResponse(ExpenseBase):
         default=None,
         alias="employeeName",
         serialization_alias="employeeName",
+    )
+    state_name: Optional[str] = Field(
+        default=None,
+        alias="stateName",
+        serialization_alias="stateName",
+    )
+    branch_name: Optional[str] = Field(
+        default=None,
+        alias="branchName",
+        serialization_alias="branchName",
     )
     receipt_url: Optional[str] = Field(
         default=None,

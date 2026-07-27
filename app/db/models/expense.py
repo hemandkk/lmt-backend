@@ -61,6 +61,18 @@ class Expense(TimestampMixin, Base):
         index=True,
     )
 
+    # Explicit geo for office / admin-created rows without an employee
+    state_id: Mapped[int | None] = mapped_column(
+        ForeignKey("states.id", ondelete="RESTRICT"),
+        nullable=True,
+        index=True,
+    )
+    branch_id: Mapped[int | None] = mapped_column(
+        ForeignKey("branches.id", ondelete="RESTRICT"),
+        nullable=True,
+        index=True,
+    )
+
     receipt_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
 
     invoice_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
@@ -104,6 +116,8 @@ class Expense(TimestampMixin, Base):
     approver = relationship("User", foreign_keys=[approved_by_id])
     verifier = relationship("User", foreign_keys=[verified_by_id])
     employee = relationship("User", foreign_keys=[employee_id])
+    state = relationship("State", foreign_keys=[state_id])
+    branch = relationship("Branch", foreign_keys=[branch_id])
     payment_request = relationship(
         "PaymentRequest",
         back_populates="expense",

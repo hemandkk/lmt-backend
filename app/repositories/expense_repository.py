@@ -27,6 +27,9 @@ class ExpenseRepository:
                 joinedload(Expense.requester),
                 joinedload(Expense.approver),
                 joinedload(Expense.verifier),
+                joinedload(Expense.employee),
+                joinedload(Expense.state),
+                joinedload(Expense.branch),
             )
             .filter(Expense.id == expense_id)
             .first()
@@ -60,7 +63,7 @@ class ExpenseRepository:
         state_id: int | None = None,
         branch_id: int | None = None,
     ) -> tuple[int, list[Expense]]:
-        from app.core.geo_scope import apply_related_user_geo
+        from app.core.geo_scope import apply_entity_geo_filter
 
         query = self.db.query(Expense).options(
             joinedload(Expense.creator),
@@ -68,6 +71,8 @@ class ExpenseRepository:
             joinedload(Expense.approver),
             joinedload(Expense.verifier),
             joinedload(Expense.employee),
+            joinedload(Expense.state),
+            joinedload(Expense.branch),
         )
 
         if date_from is not None:
@@ -87,12 +92,15 @@ class ExpenseRepository:
         if employee_id is not None:
             query = query.filter(Expense.employee_id == employee_id)
 
-        # Geo via employee (incentive/salary), else requester, else creator
-        query = apply_related_user_geo(
+        query = apply_entity_geo_filter(
             query,
-            Expense.employee_id,
-            Expense.requested_by_id,
-            Expense.created_by_id,
+            state_col=Expense.state_id,
+            branch_col=Expense.branch_id,
+            user_id_columns=(
+                Expense.employee_id,
+                Expense.requested_by_id,
+                Expense.created_by_id,
+            ),
             state_id=state_id,
             branch_id=branch_id,
         )

@@ -4,6 +4,7 @@ from fastapi import UploadFile
 from sqlalchemy.orm import Session
 
 from app.core.file_storage import FileStorage
+from app.core.geo_scope import entity_in_geo_scope, resolve_stored_geo
 from app.core.id_generator import generate_id
 from app.db.models.expense import Expense
 from app.db.models.payment_request import ExpenseCategory
@@ -35,7 +36,13 @@ class ExpenseService:
             "installment_number": expense.installment_number,
             "expense_type": expense.expense_type,
             "employee_id": expense.employee_id,
-            "employee_name": self._user_name(expense.employee) if expense.employee_id else None,
+            "employee_name": self._user_name(expense.employee)
+            if expense.employee_id
+            else None,
+            "state_id": expense.state_id,
+            "branch_id": expense.branch_id,
+            "state_name": expense.state.name if expense.state else None,
+            "branch_name": expense.branch.name if expense.branch else None,
             "receipt_url": expense.receipt_url,
             "invoice_url": expense.invoice_url,
             "payment_request_id": expense.payment_request_id,
@@ -56,6 +63,7 @@ class ExpenseService:
         self,
         payload: ExpenseCreate,
         actor_id: int | None = None,
+        actor=None,
         receipt_file: UploadFile | None = None,
         invoice_file: UploadFile | None = None,
         payment_request_id: int | None = None,
@@ -64,6 +72,9 @@ class ExpenseService:
         requested_by_id: int | None = None,
         approved_by_id: int | None = None,
         verified_by_id: int | None = None,
+        state_id: int | None = None,
+        branch_id: int | None = None,
+        skip_geo_resolve: bool = False,
     ) -> ExpenseResponse:
         code = generate_id(self.db, Expense, "expense_id", "EXP")
 
@@ -81,6 +92,22 @@ class ExpenseService:
                 filename=f"{code}_invoice",
             )
 
+        if skip_geo_resolve:
+            resolved_state_id = state_id
+            resolved_branch_id = branch_id
+        else:
+            resolved_state_id, resolved_branch_id = resolve_stored_geo(
+                self.db,
+                employee_id=payload.employee_id,
+                state_id=state_id
+                if state_id is not None
+                else payload.state_id,
+                branch_id=branch_id
+                if branch_id is not None
+                else payload.branch_id,
+                actor=actor,
+            )
+
         expense = Expense(
             expense_id=code,
             expense_date=payload.expense_date,
@@ -91,6 +118,8 @@ class ExpenseService:
             installment_number=payload.installment_number,
             expense_type=payload.expense_type,
             employee_id=payload.employee_id,
+            state_id=resolved_state_id,
+            branch_id=resolved_branch_id,
             receipt_url=receipt_url,
             invoice_url=invoice_url,
             payment_request_id=payment_request_id,
@@ -103,12 +132,11 @@ class ExpenseService:
         return self._to_response(self.repo.get_by_id(created.id) or created)
 
     def _ensure_geo_access(self, expense: Expense, viewer) -> None:
-        from app.core.geo_scope import related_user_in_geo_scope
-
         if viewer is None:
             return
-        if not related_user_in_geo_scope(
+        if not entity_in_geo_scope(
             viewer,
+            expense,
             expense.employee,
             expense.requester,
             expense.creator,
@@ -134,7 +162,7 @@ class ExpenseService:
         state_id: int | None = None,
         branch_id: int | None = None,
     ) -> dict:
-        """Scoped by assignee geo when stateId/branchId apply (admin filters)."""
+        """Scoped by stored + related-user geo when stateId/branchId apply."""
         skip = (page - 1) * page_size
         total, items = self.repo.list(
             skip=skip,
@@ -166,6 +194,26 @@ class ExpenseService:
         self._ensure_geo_access(expense, viewer)
 
         data = payload.model_dump(exclude_unset=True)
+        touching_geo = "state_id" in data or "branch_id" in data
+        if touching_geo:
+            next_state = (
+                data["state_id"] if "state_id" in data else expense.state_id
+            )
+            next_branch = (
+                data["branch_id"] if "branch_id" in data else expense.branch_id
+            )
+            # Allow clearing both; otherwise validate pair
+            if next_state is not None or next_branch is not None:
+                resolved_state, resolved_branch = resolve_stored_geo(
+                    self.db,
+                    employee_id=None,
+                    state_id=next_state,
+                    branch_id=next_branch,
+                    actor=None,
+                )
+                data["state_id"] = resolved_state
+                data["branch_id"] = resolved_branch
+
         for key, value in data.items():
             setattr(expense, key, value)
 

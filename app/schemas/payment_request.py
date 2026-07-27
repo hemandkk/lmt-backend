@@ -41,6 +41,15 @@ class PaymentRequestCreate(BaseModel):
         alias="employeeId",
         description="Required when paymentType is incentive",
     )
+    state_id: Optional[int] = Field(
+        default=None,
+        alias="stateId",
+        description="Required for admin office requests without employee",
+    )
+    branch_id: Optional[int] = Field(
+        default=None,
+        alias="branchId",
+    )
 
 
 class PaymentRequestUpdate(BaseModel):
@@ -60,6 +69,8 @@ class PaymentRequestUpdate(BaseModel):
         max_length=100,
         alias="installmentNumber",
     )
+    state_id: Optional[int] = Field(default=None, alias="stateId")
+    branch_id: Optional[int] = Field(default=None, alias="branchId")
 
 
 class PaymentRequestFulfill(BaseModel):
@@ -107,6 +118,26 @@ class PaymentRequestResponse(BaseModel):
         default=None,
         alias="employeeName",
         serialization_alias="employeeName",
+    )
+    state_id: Optional[int] = Field(
+        default=None,
+        alias="stateId",
+        serialization_alias="stateId",
+    )
+    branch_id: Optional[int] = Field(
+        default=None,
+        alias="branchId",
+        serialization_alias="branchId",
+    )
+    state_name: Optional[str] = Field(
+        default=None,
+        alias="stateName",
+        serialization_alias="stateName",
+    )
+    branch_name: Optional[str] = Field(
+        default=None,
+        alias="branchName",
+        serialization_alias="branchName",
     )
     status: PaymentRequestStatus
     transaction_id: Optional[str] = Field(

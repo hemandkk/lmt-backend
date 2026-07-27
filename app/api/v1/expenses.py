@@ -101,6 +101,8 @@ async def create_expense(
                 "employeeId": _form_value(
                     form, "employeeId", "employee_id"
                 ),
+                "stateId": _form_value(form, "stateId", "state_id"),
+                "branchId": _form_value(form, "branchId", "branch_id"),
             }
             receipt_file = _pick_upload(
                 form, "receipt", "receiptFile", "receipt_file"
@@ -125,12 +127,19 @@ async def create_expense(
             detail="employeeId is required for employee-related payment type.",
         )
 
-    return ExpenseService(db).create(
-        payload,
-        actor_id=current_user.id,
-        receipt_file=receipt_file,
-        invoice_file=invoice_file,
-    )
+    try:
+        return ExpenseService(db).create(
+            payload,
+            actor_id=current_user.id,
+            actor=current_user,
+            receipt_file=receipt_file,
+            invoice_file=invoice_file,
+        )
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=str(exc),
+        ) from exc
 
 
 @router.get("", response_model=ExpenseListResponse)
@@ -209,6 +218,8 @@ async def update_expense(
                     "installmentNumber",
                     "installment_number",
                 ),
+                "stateId": ("stateId", "state_id"),
+                "branchId": ("branchId", "branch_id"),
             }
             for field, keys in mapping.items():
                 value = _form_value(form, *keys)
@@ -239,7 +250,17 @@ async def update_expense(
             viewer=current_user,
         )
     except ValueError as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
+        detail = str(exc)
+        code = (
+            404
+            if "not found" in detail.lower()
+            and "state" not in detail.lower()
+            and "branch" not in detail.lower()
+            else 422
+        )
+        if detail == "Expense not found.":
+            code = 404
+        raise HTTPException(status_code=code, detail=detail) from exc
 
 
 @router.delete("/{expense_id}", status_code=status.HTTP_204_NO_CONTENT)
