@@ -331,7 +331,12 @@ class DashboardService:
             total_employees=(
                 1
                 if employee_id is not None
-                else AnalyticsRepository.count_employees(db)
+                else AnalyticsRepository.count_employees(
+                    db, date_from=date_from, date_to=date_to
+                )
+            ),
+            total_users=AnalyticsRepository.count_users(
+                db, date_from=date_from, date_to=date_to
             ),
             total_revenue=AnalyticsRepository.payment_collected(
                 db,
@@ -523,7 +528,9 @@ class ReportService:
             total_employees=(
                 1
                 if employee_id is not None
-                else AnalyticsRepository.count_employees(db)
+                else AnalyticsRepository.count_employees(
+                    db, date_from=date_from, date_to=date_to
+                )
             ),
             total_revenue=AnalyticsRepository.payment_collected(
                 db,

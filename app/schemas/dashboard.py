@@ -208,6 +208,7 @@ class AdminDashboardResponse(DashboardMetricsMixin):
     model_config = _alias_config()
 
     total_employees: int = Field(serialization_alias="totalEmployees")
+    total_users: int = Field(default=0, serialization_alias="totalUsers")
     total_revenue: Decimal = Field(
         default=Decimal("0"), serialization_alias="totalRevenue"
     )

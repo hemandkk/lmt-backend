@@ -749,6 +749,16 @@ class ProspectService:
             prospect.exam_certified = certified
         if actor_id is not None:
             prospect.updated_by_id = actor_id
-        apply_admission_stage_autos(prospect)
+
+        # Exam toggles drive admission stage (certified takes precedence if both sent).
+        if certified is True:
+            prospect.admission_stage = AdmissionStage.delivered
+        elif certified is False:
+            prospect.admission_stage = AdmissionStage.waiting_for_100_percent_payment
+        elif attended is True:
+            prospect.admission_stage = AdmissionStage.exam_attended
+        elif attended is False:
+            prospect.admission_stage = AdmissionStage.fifty_percent_paid
+
         ProspectRepository.update(db, prospect)
         return ProspectService._after_change_sync(db, prospect_id, actor_id)

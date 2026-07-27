@@ -252,45 +252,101 @@ class AnalyticsRepository:
         custom_from: Optional[date] = None,
         custom_to: Optional[date] = None,
     ) -> dict:
-        current = today()
-        result = {
-            "today": AnalyticsRepository.payment_collected(
-                db, employee_id=employee_id, date_from=current, date_to=current
-            ),
-            "this_week": AnalyticsRepository.payment_collected(
-                db,
-                employee_id=employee_id,
-                date_from=start_of_week(current),
-                date_to=end_of_week(current),
-            ),
-            "this_month": AnalyticsRepository.payment_collected(
-                db,
-                employee_id=employee_id,
-                date_from=start_of_month(current),
-                date_to=end_of_month(current),
-            ),
-            "total": AnalyticsRepository.payment_collected(db, employee_id=employee_id),
-            "custom": None,
-        }
+        """
+        Break down completed payments into today / this week / this month / total.
 
-        if custom_from or custom_to:
-            result["custom"] = AnalyticsRepository.payment_collected(
+        When custom_from/custom_to are set (report filters):
+        - total = sum within that filter range (not all-time)
+        - today/week/month = calendar periods clipped to the filter range
+        - custom = same as total (explicit alias)
+
+        "Today" uses Asia/Kolkata so payment_date matches local business day.
+        """
+        from app.core.date_utils import intersect_date_ranges
+
+        current = today()
+        filter_from = custom_from
+        filter_to = custom_to
+        has_filter = filter_from is not None or filter_to is not None
+
+        def _sum(period_from: Optional[date], period_to: Optional[date]) -> Decimal:
+            start, end, empty = intersect_date_ranges(
+                period_from, period_to, filter_from, filter_to
+            )
+            if empty:
+                return Decimal("0")
+            return AnalyticsRepository.payment_collected(
                 db,
                 employee_id=employee_id,
-                date_from=custom_from,
-                date_to=custom_to,
+                date_from=start,
+                date_to=end,
             )
 
-        return result
+        today_sum = _sum(current, current)
+        week_sum = _sum(start_of_week(current), end_of_week(current))
+        month_sum = _sum(start_of_month(current), end_of_month(current))
+
+        if has_filter:
+            total_sum = AnalyticsRepository.payment_collected(
+                db,
+                employee_id=employee_id,
+                date_from=filter_from,
+                date_to=filter_to,
+            )
+            custom_sum = total_sum
+        else:
+            total_sum = AnalyticsRepository.payment_collected(
+                db, employee_id=employee_id
+            )
+            custom_sum = None
+
+        return {
+            "today": today_sum,
+            "this_week": week_sum,
+            "this_month": month_sum,
+            "total": total_sum,
+            "custom": custom_sum,
+        }
 
     @staticmethod
-    def count_employees(db: Session) -> int:
-        return (
-            db.query(func.count(User.id))
-            .filter(User.role == UserRole.employee, User.is_active.is_(True))
-            .scalar()
-            or 0
+    def count_employees(
+        db: Session,
+        date_from: Optional[date] = None,
+        date_to: Optional[date] = None,
+    ) -> int:
+        """Active sales staff: employee + manager + sales_head."""
+        from app.core.roles import SALES_ROLES
+
+        query = db.query(func.count(User.id)).filter(
+            User.role.in_(tuple(SALES_ROLES)),
+            User.is_active.is_(True),
         )
+        start_dt, end_dt = datetime_range_bounds(date_from, date_to)
+        if start_dt:
+            query = query.filter(User.created_at >= start_dt)
+        if end_dt:
+            query = query.filter(User.created_at <= end_dt)
+        return int(query.scalar() or 0)
+
+    @staticmethod
+    def count_users(
+        db: Session,
+        date_from: Optional[date] = None,
+        date_to: Optional[date] = None,
+    ) -> int:
+        """Active non-admin users (staff roles)."""
+        from app.core.roles import ASSIGNABLE_ROLES
+
+        query = db.query(func.count(User.id)).filter(
+            User.role.in_(tuple(ASSIGNABLE_ROLES)),
+            User.is_active.is_(True),
+        )
+        start_dt, end_dt = datetime_range_bounds(date_from, date_to)
+        if start_dt:
+            query = query.filter(User.created_at >= start_dt)
+        if end_dt:
+            query = query.filter(User.created_at <= end_dt)
+        return int(query.scalar() or 0)
 
     @staticmethod
     def leads_by_stage(
