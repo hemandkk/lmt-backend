@@ -44,10 +44,17 @@ def _should_mask(user: User, prospect) -> bool:
 
 def mask_prospect(prospect, user: User) -> None:
     """
-    Mask sensitive fields on a prospect object in-place if:
-    - prospect.admission_stage == completed
-    - user is not admin
+    Apply response visibility rules:
+    - Assignee state/branch fields are admin-only (flag for ProspectResponse).
+    - Mask sensitive fields when admission_stage == completed and user is not admin.
     """
+    # ProspectResponse.pull_assignee_fields reads this flag
+    setattr(
+        prospect,
+        "_include_assignee_geo",
+        getattr(user, "role", None) == UserRole.admin,
+    )
+
     if not _should_mask(user, prospect):
         return
 

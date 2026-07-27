@@ -410,6 +410,24 @@ class ProspectResponse(BaseModel):
     assigned_to_code: Optional[str] = Field(
         default=None, serialization_alias="assignedToCode"
     )
+    assigned_to_state_id: Optional[int] = Field(
+        default=None, serialization_alias="assignedToStateId"
+    )
+    assigned_to_state_name: Optional[str] = Field(
+        default=None, serialization_alias="assignedToStateName"
+    )
+    assigned_to_state_code: Optional[str] = Field(
+        default=None, serialization_alias="assignedToStateCode"
+    )
+    assigned_to_branch_id: Optional[int] = Field(
+        default=None, serialization_alias="assignedToBranchId"
+    )
+    assigned_to_branch_name: Optional[str] = Field(
+        default=None, serialization_alias="assignedToBranchName"
+    )
+    assigned_to_branch_code: Optional[str] = Field(
+        default=None, serialization_alias="assignedToBranchCode"
+    )
     course_id: Optional[int] = Field(
         default=None, serialization_alias="courseId"
     )
@@ -438,24 +456,87 @@ class ProspectResponse(BaseModel):
     def pull_assignee_fields(cls, data: Any, handler):
         assignee_name = None
         assignee_code = None
+        state_id = None
+        state_name = None
+        state_code = None
+        branch_id = None
+        branch_name = None
+        branch_code = None
+        include_geo = False
+
         if not isinstance(data, dict):
+            include_geo = bool(getattr(data, "_include_assignee_geo", False))
             assignee = getattr(data, "assigned_to", None)
             if assignee is not None:
                 assignee_name = assignee.name
                 assignee_code = assignee.employee_id
+                if include_geo:
+                    state = getattr(assignee, "state", None)
+                    branch = getattr(assignee, "branch", None)
+                    state_id = getattr(assignee, "state_id", None)
+                    branch_id = getattr(assignee, "branch_id", None)
+                    if state is not None:
+                        state_name = state.name
+                        state_code = state.state_code
+                    if branch is not None:
+                        branch_name = branch.name
+                        branch_code = branch.branch_code
         elif isinstance(data, dict):
+            include_geo = bool(
+                data.get("_include_assignee_geo")
+                or data.get("includeAssigneeGeo")
+            )
             assignee_name = data.get("assigned_to_name") or data.get(
                 "assignedToName"
             )
             assignee_code = data.get("assigned_to_code") or data.get(
                 "assignedToCode"
             )
+            if include_geo:
+                state_id = data.get("assigned_to_state_id") or data.get(
+                    "assignedToStateId"
+                )
+                state_name = data.get("assigned_to_state_name") or data.get(
+                    "assignedToStateName"
+                )
+                state_code = data.get("assigned_to_state_code") or data.get(
+                    "assignedToStateCode"
+                )
+                branch_id = data.get("assigned_to_branch_id") or data.get(
+                    "assignedToBranchId"
+                )
+                branch_name = data.get("assigned_to_branch_name") or data.get(
+                    "assignedToBranchName"
+                )
+                branch_code = data.get("assigned_to_branch_code") or data.get(
+                    "assignedToBranchCode"
+                )
 
         result = handler(data)
         if assignee_name is not None:
             result.assigned_to_name = assignee_name
         if assignee_code is not None:
             result.assigned_to_code = assignee_code
+        if include_geo:
+            if state_id is not None:
+                result.assigned_to_state_id = state_id
+            if state_name is not None:
+                result.assigned_to_state_name = state_name
+            if state_code is not None:
+                result.assigned_to_state_code = state_code
+            if branch_id is not None:
+                result.assigned_to_branch_id = branch_id
+            if branch_name is not None:
+                result.assigned_to_branch_name = branch_name
+            if branch_code is not None:
+                result.assigned_to_branch_code = branch_code
+        else:
+            result.assigned_to_state_id = None
+            result.assigned_to_state_name = None
+            result.assigned_to_state_code = None
+            result.assigned_to_branch_id = None
+            result.assigned_to_branch_name = None
+            result.assigned_to_branch_code = None
         return result
 
     @field_validator("exam_attended", "exam_certified", "sheets_synced", mode="before")

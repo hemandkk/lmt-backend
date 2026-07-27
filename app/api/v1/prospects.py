@@ -579,20 +579,24 @@ async def create_prospect(
             if current_user and is_sales_user(current_user):
                 payload.assigned_to_id = current_user.id
 
-            return ProspectService.create(
+            result = ProspectService.create(
                 db,
                 payload,
                 actor_id=actor_id,
                 document_files=document_files,
                 receipt_files=receipt_files,
             )
+            mask_prospect(result, current_user)
+            return result
 
         body = await request.json()
         payload = ProspectCreate.model_validate(body)
         if current_user and is_sales_user(current_user):
             payload.assigned_to_id = current_user.id
 
-        return ProspectService.create(db, payload, actor_id=actor_id)
+        result = ProspectService.create(db, payload, actor_id=actor_id)
+        mask_prospect(result, current_user)
+        return result
 
     except HTTPException:
         raise
@@ -1101,7 +1105,9 @@ def sync_prospect_to_sheets(
     synced = GoogleSheetsService.sync_prospect(
         db, prospect, actor_id=current_user.id
     )
-    return ProspectService.get(db, synced.id)
+    result = ProspectService.get(db, synced.id)
+    mask_prospect(result, current_user)
+    return result
 
 
 @router.delete("/{prospect_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -1221,12 +1227,14 @@ def assign_prospect(
     Body: { "assignedToId": <employeeUserId> } or null to unassign.
     """
     try:
-        return ProspectService.assign(
+        result = ProspectService.assign(
             db,
             prospect_id,
             payload.assigned_to_id,
             actor_id=current_user.id,
         )
+        mask_prospect(result, current_user)
+        return result
     except ValueError as ex:
         detail = str(ex)
         code = (
