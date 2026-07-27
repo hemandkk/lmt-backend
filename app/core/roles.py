@@ -44,6 +44,14 @@ ASSIGNABLE_ROLES = frozenset(
     }
 )
 
+# May be created/updated with no geo, state-only, or state+branch
+GEO_OPTIONAL_ROLES = frozenset(
+    {
+        UserRole.accountant,
+        UserRole.processing_team,
+    }
+)
+
 # Roles that own leads / mutate CRM like sales staff
 SALES_ROLES = frozenset(
     {

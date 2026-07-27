@@ -3,7 +3,12 @@ from decimal import Decimal
 from sqlalchemy import func, or_
 from sqlalchemy.orm import Session, joinedload
 
-from app.core.roles import ASSIGNABLE_ROLES, SALES_ROLES, normalize_role
+from app.core.roles import (
+    ASSIGNABLE_ROLES,
+    GEO_OPTIONAL_ROLES,
+    SALES_ROLES,
+    normalize_role,
+)
 from app.core.security import hash_password
 from app.db.models.prospect import Prospect
 from app.db.models.user import User, UserRole
@@ -54,13 +59,40 @@ class EmployeeService:
         branch_id: int | None,
         *,
         required: bool,
+        allow_state_only: bool = False,
     ) -> tuple[int | None, int | None]:
-        if required and (state_id is None or branch_id is None):
-            raise ValueError("stateId and branchId are required for staff.")
+        """
+        Validate state/branch assignment.
+
+        - required=True (sales): both state and branch required.
+        - allow_state_only=True (accountant/processing): none, state-only,
+          or state+branch are valid. Branch without state is rejected
+          (unless state can be inferred from the branch).
+        """
         if state_id is None and branch_id is None:
+            if required:
+                raise ValueError("stateId and branchId are required for staff.")
             return None, None
-        if state_id is None or branch_id is None:
-            raise ValueError("stateId and branchId must both be provided.")
+
+        if branch_id is not None and state_id is None:
+            branch = BranchRepository.get_by_id(db, branch_id)
+            if not branch or not branch.is_active:
+                raise ValueError("branchId must be an active branch.")
+            # Infer state from branch when only branchId is sent
+            state_id = branch.state_id
+
+        if state_id is not None and branch_id is None:
+            if not allow_state_only:
+                raise ValueError(
+                    "stateId and branchId are required for staff."
+                    if required
+                    else "stateId and branchId must both be provided."
+                )
+            state = StateRepository.get_by_id(db, state_id)
+            if not state or not state.is_active:
+                raise ValueError("stateId must be an active state.")
+            return state_id, None
+
         state = StateRepository.get_by_id(db, state_id)
         if not state or not state.is_active:
             raise ValueError("stateId must be an active state.")
@@ -70,6 +102,15 @@ class EmployeeService:
         if branch.state_id != state_id:
             raise ValueError("branchId does not belong to the selected state.")
         return state_id, branch_id
+
+    @staticmethod
+    def _geo_rules_for_role(role: UserRole) -> tuple[bool, bool]:
+        """Returns (required, allow_state_only)."""
+        if role in GEO_OPTIONAL_ROLES:
+            return False, True
+        if role in SALES_ROLES:
+            return True, False
+        return True, False
 
     @staticmethod
     def _to_response(db: Session, user: User) -> EmployeeResponse:
@@ -274,11 +315,15 @@ class EmployeeService:
                 db, sales_head_id, UserRole.sales_head, "reportsToSalesHeadId"
             )
 
+        required_geo, allow_state_only = EmployeeService._geo_rules_for_role(
+            role
+        )
         state_id, branch_id = EmployeeService._resolve_state_branch(
             db,
             payload.state_id,
             payload.branch_id,
-            required=True,
+            required=required_geo,
+            allow_state_only=allow_state_only,
         )
 
         user = User(
@@ -421,17 +466,23 @@ class EmployeeService:
                 )
                 user.reports_to_sales_head_id = sid
 
-        # State/branch: required for staff; validate when either field is present
-        # or when still missing on the user.
+        # State/branch rules depend on role (sales required; accountant/processing optional)
+        required_geo, allow_state_only = EmployeeService._geo_rules_for_role(
+            user.role
+        )
         touching_geo = "state_id" in data or "branch_id" in data
         next_state = data["state_id"] if "state_id" in data else user.state_id
         next_branch = data["branch_id"] if "branch_id" in data else user.branch_id
-        if touching_geo or user.state_id is None or user.branch_id is None:
+        missing_required = required_geo and (
+            user.state_id is None or user.branch_id is None
+        )
+        if touching_geo or missing_required:
             sid, bid = EmployeeService._resolve_state_branch(
                 db,
                 next_state,
                 next_branch,
-                required=True,
+                required=required_geo,
+                allow_state_only=allow_state_only,
             )
             user.state_id = sid
             user.branch_id = bid

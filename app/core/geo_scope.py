@@ -10,23 +10,43 @@ from sqlalchemy.orm import Query
 from app.db.models.prospect import Prospect
 from app.db.models.user import User
 
-# Non-admin users without state/branch get this sentinel so filters match nothing.
+# Sales users without state+branch get this sentinel so filters match nothing.
 _EMPTY_GEO_ID = -1
 
 
 def resolve_geo_scope(user) -> Tuple[Optional[int], Optional[int]]:
     """
-    Admin: (None, None) — no geo restriction.
-    Non-admin: (user.state_id, user.branch_id).
-    Non-admin missing state or branch: (-1, -1) so queries return empty.
+    Resolve forced geo for the logged-in user.
+
+    - Admin: (None, None) — unrestricted.
+    - Accountant / processing_team:
+        - no state → (None, None) — see all
+        - state only → (state_id, None) — all branches in that state
+        - state + branch → (state_id, branch_id) — that branch only
+    - Sales roles (and other non-admin):
+        - both set → (state_id, branch_id)
+        - otherwise → (-1, -1) — empty results
     """
-    from app.core.roles import is_admin
+    from app.core.roles import (
+        is_admin,
+        is_accountant,
+        is_processing_team,
+    )
 
     if is_admin(user):
         return None, None
 
     state_id = getattr(user, "state_id", None)
     branch_id = getattr(user, "branch_id", None)
+
+    if is_accountant(user) or is_processing_team(user):
+        if state_id is None:
+            return None, None
+        return (
+            int(state_id),
+            int(branch_id) if branch_id is not None else None,
+        )
+
     if state_id is None or branch_id is None:
         return _EMPTY_GEO_ID, _EMPTY_GEO_ID
     return int(state_id), int(branch_id)
@@ -39,7 +59,7 @@ def merge_geo_query_params(
 ) -> Tuple[Optional[int], Optional[int]]:
     """
     Admin may use client stateId/branchId filters.
-    Non-admin is always forced to their own state/branch (client params ignored).
+    Non-admin is forced to their assigned geo (client params ignored).
     """
     from app.core.roles import is_admin
 
@@ -56,6 +76,8 @@ def assignee_in_geo_scope(prospect, user) -> bool:
         return True
 
     state_id, branch_id = resolve_geo_scope(user)
+    if state_id is None and branch_id is None:
+        return True
     if state_id == _EMPTY_GEO_ID:
         return False
 
@@ -76,7 +98,7 @@ def apply_user_geo_filter(
     branch_id: Optional[int] = None,
 ) -> Query:
     """Filter a User query by state/branch."""
-    if state_id == _EMPTY_GEO_ID or branch_id == _EMPTY_GEO_ID:
+    if state_id == _EMPTY_GEO_ID:
         return query.filter(false())
     if state_id is not None:
         query = query.filter(User.state_id == state_id)
@@ -96,7 +118,7 @@ def apply_prospect_assignee_geo(
     Constrain prospects to those whose assignee belongs to state/branch.
     Joins User on assigned_to_id when needed.
     """
-    if state_id == _EMPTY_GEO_ID or branch_id == _EMPTY_GEO_ID:
+    if state_id == _EMPTY_GEO_ID:
         return query.filter(false())
     if state_id is None and branch_id is None:
         return query
