@@ -29,12 +29,19 @@ def list_supervisors(
     role: Optional[str] = Query(
         None, description="manager | sales_head"
     ),
+    state_id: Optional[int] = Query(None, alias="stateId"),
+    branch_id: Optional[int] = Query(None, alias="branchId"),
     db: Session = Depends(get_db),
     current_user: User = Depends(require_admin),
 ):
     """Admin: list managers / sales heads for assignment dropdowns."""
     try:
-        return TeamService.list_supervisors(db, role=role)
+        return TeamService.list_supervisors(
+            db,
+            role=role,
+            state_id=state_id,
+            branch_id=branch_id,
+        )
     except ValueError as ex:
         raise HTTPException(status_code=400, detail=str(ex)) from ex
 

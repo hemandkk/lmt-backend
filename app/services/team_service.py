@@ -99,10 +99,17 @@ class TeamService:
     def list_supervisors(
         db: Session,
         role: Optional[str] = None,
+        state_id: Optional[int] = None,
+        branch_id: Optional[int] = None,
     ) -> dict:
+        from app.core.geo_scope import apply_user_geo_filter
+
         query = db.query(User).filter(
             User.role.in_(list(SUPERVISOR_ROLES)),
             User.is_active.is_(True),
+        )
+        query = apply_user_geo_filter(
+            query, state_id=state_id, branch_id=branch_id
         )
         if role:
             from app.core.roles import normalize_role
