@@ -104,13 +104,11 @@ class ExportService:
             "Balance Amount",
             "Payment Count",
             "Payment %",
-            "Stage",
-            "Current Lead Stage",
             "Admission Stage",
-            "Source",
-            "Follow-up Date",
-            "Next Follow-up",
-            "Lead Owner",
+            #"Source",
+            #"Follow-up Date",
+            #"Next Follow-up",
+            "Admission Owner",
             "Counsellor",
             "Employee ID",
             "Department",
@@ -230,9 +228,6 @@ class ExportService:
             elif p.course_id:
                 course_name = course_names.get(p.course_id, "")
 
-            stage_val = (
-                p.stage.value if hasattr(p.stage, "value") else str(p.stage or "")
-            )
             extra = build_lead_sync_fields(p, db=db)
 
             # Apply masking for completed stage (non-admin users)
@@ -284,13 +279,11 @@ class ExportService:
                 float(balance),
                 payment_count,
                 pct,
-                stage_val,
-                extra.get("current_lead_stage", stage_val),
                 extra.get("admission_stage", ""),
-                p.source or "",
-                extra.get("follow_up_date", ""),
-                extra.get("next_follow_up", ""),
-                extra.get("lead_owner", p_assigned_name),
+                #p.source or "",
+                #extra.get("follow_up_date", ""),
+                #extra.get("next_follow_up", ""),
+                #extra.get("lead_owner", p_assigned_name),
                 p_assigned_name,
                 p_assigned_code,
                 extra.get("department", ""),
