@@ -182,6 +182,8 @@ class PaymentService:
         skip: int = 0,
         limit: int = 20,
         assigned_to_id: int | None = None,
+        state_id: int | None = None,
+        branch_id: int | None = None,
         prospect_id: int | None = None,
         admission_stages: list[str] | None = None,
         date_from=None,
@@ -191,6 +193,8 @@ class PaymentService:
             skip=skip,
             limit=limit,
             assigned_to_id=assigned_to_id,
+            state_id=state_id,
+            branch_id=branch_id,
             prospect_id=prospect_id,
             admission_stages=admission_stages,
             date_from=date_from,
@@ -203,12 +207,16 @@ class PaymentService:
     def get_summary(
         self,
         assigned_to_id: int | None = None,
+        state_id: int | None = None,
+        branch_id: int | None = None,
         prospect_id: int | None = None,
         date_from: date | None = None,
         date_to: date | None = None,
     ) -> PaymentSummaryResponse:
         breakdown = self.payment_repo.summary_breakdown(
             assigned_to_id=assigned_to_id,
+            state_id=state_id,
+            branch_id=branch_id,
             prospect_id=prospect_id,
             date_from=date_from,
             date_to=date_to,
@@ -216,11 +224,16 @@ class PaymentService:
         collected = AnalyticsRepository.payment_collected_summary(
             self.db,
             employee_id=assigned_to_id,
+            state_id=state_id,
+            branch_id=branch_id,
             custom_from=date_from,
             custom_to=date_to,
         )
         lead_status = AnalyticsRepository.payment_status_summary(
-            self.db, employee_id=assigned_to_id
+            self.db,
+            employee_id=assigned_to_id,
+            state_id=state_id,
+            branch_id=branch_id,
         )
         by_type = breakdown["by_type"]
         by_status = breakdown["by_status"]

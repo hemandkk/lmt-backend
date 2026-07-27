@@ -128,6 +128,18 @@ def build_lead_sync_fields(
         "university": _fmt(prospect.university),
         "department": _fmt(getattr(owner, "department", None) if owner else None),
         "designation": _fmt(getattr(owner, "designation", None) if owner else None),
+        "state": _fmt(getattr(getattr(owner, "state", None), "name", None) if owner else None),
+        "state_code": _fmt(
+            getattr(getattr(owner, "state", None), "state_code", None) if owner else None
+        ),
+        "branch": _fmt(
+            getattr(getattr(owner, "branch", None), "name", None) if owner else None
+        ),
+        "branch_code": _fmt(
+            getattr(getattr(owner, "branch", None), "branch_code", None)
+            if owner
+            else None
+        ),
         "remarks": _fmt(prospect.notes),
         "created_by": _user_label(created_by),
         "created_at": _fmt(getattr(prospect, "created_at", None)),
@@ -152,6 +164,10 @@ EXTRA_SYNC_HEADERS = [
     "University",
     "Department",
     "Designation",
+    "State",
+    "State Code",
+    "Branch",
+    "Branch Code",
     "Remarks",
     "Created By",
     "Created At",
@@ -177,6 +193,10 @@ def extra_sync_values(fields: dict[str, str]) -> list[str]:
         fields.get("university", ""),
         fields.get("department", ""),
         fields.get("designation", ""),
+        fields.get("state", ""),
+        fields.get("state_code", ""),
+        fields.get("branch", ""),
+        fields.get("branch_code", ""),
         fields.get("remarks", ""),
         fields.get("created_by", ""),
         fields.get("created_at", ""),

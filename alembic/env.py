@@ -16,6 +16,9 @@ from app.db.models.payment import Payment
 from app.db.models.prospect_document import ProspectDocument
 from app.db.models.expense import Expense
 from app.db.models.payment_request import PaymentRequest
+from app.db.models.state import State
+from app.db.models.branch import Branch
+
 
 from app.core.config import settings
 

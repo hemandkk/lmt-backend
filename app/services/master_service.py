@@ -4,15 +4,22 @@ from fastapi import UploadFile
 from sqlalchemy.orm import Session
 
 from app.core.id_generator import generate_next_code
+from app.db.models.branch import Branch
 from app.db.models.course import Course
 from app.db.models.incentive_slab import IncentiveSlab
 from app.db.models.specialization import Specialization
+from app.db.models.state import State
 from app.db.models.user import User, UserRole
+from app.repositories.branch_repository import BranchRepository
 from app.repositories.course_repository import CourseRepository
 from app.repositories.incentive_repository import IncentiveRepository
 from app.repositories.settings_repository import SettingsRepository
 from app.repositories.specialization_repository import SpecializationRepository
+from app.repositories.state_repository import StateRepository
 from app.schemas.master import (
+    BranchCreate,
+    BranchResponse,
+    BranchUpdate,
     BulkEmployeeMonthlyTargetRequest,
     BulkEmployeeMonthlyTargetResponse,
     CourseCreate,
@@ -26,6 +33,9 @@ from app.schemas.master import (
     SalesTargetOverviewResponse,
     SpecializationCreate,
     SpecializationUpdate,
+    StateCreate,
+    StateResponse,
+    StateUpdate,
     UpdateIncentiveSlabsRequest,
 )
 from app.services.master_import import (
@@ -306,6 +316,169 @@ class MasterService:
             skipped=skipped,
             errors=errors,
         )
+
+    # --------------------------------------------------
+    # States
+    # --------------------------------------------------
+
+    @staticmethod
+    def get_states(db: Session, *, active_only: bool = False):
+        return StateRepository.get_all(db, active_only=active_only)
+
+    @staticmethod
+    def create_state(db: Session, payload: StateCreate):
+        name = payload.name.strip()
+        code = payload.state_code.strip().upper()
+        if not name or not code:
+            raise ValueError("State name and code are required.")
+        if StateRepository.get_by_name(db, name):
+            raise ValueError("State already exists.")
+        if StateRepository.get_by_code(db, code):
+            raise ValueError(f"State code {code} already exists.")
+        return StateRepository.create(
+            db,
+            State(
+                name=name,
+                state_code=code,
+                is_active=payload.is_active,
+            ),
+        )
+
+    @staticmethod
+    def update_state(db: Session, state_id: int, payload: StateUpdate):
+        state = StateRepository.get_by_id(db, state_id)
+        if not state:
+            raise ValueError("State not found.")
+        data = payload.model_dump(exclude_unset=True)
+        if "name" in data and data["name"]:
+            name = data["name"].strip()
+            existing = StateRepository.get_by_name(db, name)
+            if existing and existing.id != state.id:
+                raise ValueError("State already exists.")
+            data["name"] = name
+        if "state_code" in data and data["state_code"]:
+            code = data["state_code"].strip().upper()
+            existing_code = StateRepository.get_by_code(db, code)
+            if existing_code and existing_code.id != state.id:
+                raise ValueError(f"State code {code} already exists.")
+            data["state_code"] = code
+        for key, value in data.items():
+            setattr(state, key, value)
+        return StateRepository.update(db, state)
+
+    @staticmethod
+    def delete_state(db: Session, state_id: int):
+        state = StateRepository.get_by_id(db, state_id)
+        if not state:
+            raise ValueError("State not found.")
+        branch_count = (
+            db.query(Branch).filter(Branch.state_id == state_id).count()
+        )
+        if branch_count:
+            raise ValueError(
+                "Cannot delete state: it has branches. "
+                "Remove or reassign branches first."
+            )
+        user_count = db.query(User).filter(User.state_id == state_id).count()
+        if user_count:
+            raise ValueError(
+                "Cannot delete state: employees are assigned to it."
+            )
+        StateRepository.delete(db, state)
+
+    # --------------------------------------------------
+    # Branches
+    # --------------------------------------------------
+
+    @staticmethod
+    def _branch_to_response(branch: Branch) -> BranchResponse:
+        state = getattr(branch, "state", None)
+        return BranchResponse(
+            id=branch.id,
+            branch_code=branch.branch_code,
+            name=branch.name,
+            state_id=branch.state_id,
+            state_name=state.name if state is not None else None,
+            state_code=state.state_code if state is not None else None,
+            is_active=bool(branch.is_active),
+            created_at=branch.created_at,
+            updated_at=branch.updated_at,
+        )
+
+    @staticmethod
+    def get_branches(
+        db: Session,
+        *,
+        active_only: bool = False,
+        state_id: int | None = None,
+    ):
+        branches = BranchRepository.get_all(
+            db, active_only=active_only, state_id=state_id
+        )
+        return [MasterService._branch_to_response(b) for b in branches]
+
+    @staticmethod
+    def create_branch(db: Session, payload: BranchCreate):
+        state = StateRepository.get_by_id(db, payload.state_id)
+        if not state:
+            raise ValueError("State not found.")
+        name = payload.name.strip()
+        if not name:
+            raise ValueError("Branch name is required.")
+        code = (
+            payload.branch_code.strip().upper()
+            if payload.branch_code
+            else generate_next_code(db, Branch, "branch_code", "BR")
+        )
+        if BranchRepository.get_by_code(db, code):
+            raise ValueError(f"Branch code {code} already exists.")
+        branch = BranchRepository.create(
+            db,
+            Branch(
+                name=name,
+                branch_code=code,
+                state_id=payload.state_id,
+                is_active=payload.is_active,
+            ),
+        )
+        return MasterService._branch_to_response(branch)
+
+    @staticmethod
+    def update_branch(db: Session, branch_id: int, payload: BranchUpdate):
+        branch = BranchRepository.get_by_id(db, branch_id)
+        if not branch:
+            raise ValueError("Branch not found.")
+        data = payload.model_dump(exclude_unset=True)
+        if "state_id" in data and data["state_id"] is not None:
+            state = StateRepository.get_by_id(db, data["state_id"])
+            if not state:
+                raise ValueError("State not found.")
+        if "name" in data and data["name"]:
+            data["name"] = data["name"].strip()
+        if "branch_code" in data and data["branch_code"]:
+            code = data["branch_code"].strip().upper()
+            existing_code = BranchRepository.get_by_code(db, code)
+            if existing_code and existing_code.id != branch.id:
+                raise ValueError(f"Branch code {code} already exists.")
+            data["branch_code"] = code
+        for key, value in data.items():
+            setattr(branch, key, value)
+        updated = BranchRepository.update(db, branch)
+        return MasterService._branch_to_response(updated)
+
+    @staticmethod
+    def delete_branch(db: Session, branch_id: int):
+        branch = BranchRepository.get_by_id(db, branch_id)
+        if not branch:
+            raise ValueError("Branch not found.")
+        user_count = (
+            db.query(User).filter(User.branch_id == branch_id).count()
+        )
+        if user_count:
+            raise ValueError(
+                "Cannot delete branch: employees are assigned to it."
+            )
+        BranchRepository.delete(db, branch)
 
     # --------------------------------------------------
     # Incentive slabs

@@ -76,15 +76,19 @@ def admin_dashboard(
         alias="employeeId",
         description="Optional: filter all KPIs to one employee",
     ),
+    state_id: Optional[int] = Query(None, alias="stateId"),
+    branch_id: Optional[int] = Query(None, alias="branchId"),
     db: Session = Depends(get_db),
     current_user: User = Depends(require_admin),
 ):
     """
-    Admin dashboard. View all, or filter with ?employeeId=.
+    Admin dashboard. View all, or filter with ?employeeId= / stateId / branchId.
     """
     return DashboardService.admin_dashboard(
         db,
         date_from=date_from,
         date_to=date_to,
         employee_id=employee_id,
+        state_id=state_id,
+        branch_id=branch_id,
     )

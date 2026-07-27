@@ -8,6 +8,8 @@ from app.core.security import hash_password
 from app.db.models.prospect import Prospect
 from app.db.models.user import User, UserRole
 from app.repositories.analytics_repository import AnalyticsRepository
+from app.repositories.branch_repository import BranchRepository
+from app.repositories.state_repository import StateRepository
 from app.repositories.user_repository import UserRepository
 from app.schemas.employee import (
     EmployeeCreate,
@@ -46,6 +48,30 @@ class EmployeeService:
             )
 
     @staticmethod
+    def _resolve_state_branch(
+        db: Session,
+        state_id: int | None,
+        branch_id: int | None,
+        *,
+        required: bool,
+    ) -> tuple[int | None, int | None]:
+        if required and (state_id is None or branch_id is None):
+            raise ValueError("stateId and branchId are required for staff.")
+        if state_id is None and branch_id is None:
+            return None, None
+        if state_id is None or branch_id is None:
+            raise ValueError("stateId and branchId must both be provided.")
+        state = StateRepository.get_by_id(db, state_id)
+        if not state or not state.is_active:
+            raise ValueError("stateId must be an active state.")
+        branch = BranchRepository.get_by_id(db, branch_id)
+        if not branch or not branch.is_active:
+            raise ValueError("branchId must be an active branch.")
+        if branch.state_id != state_id:
+            raise ValueError("branchId does not belong to the selected state.")
+        return state_id, branch_id
+
+    @staticmethod
     def _to_response(db: Session, user: User) -> EmployeeResponse:
         effective, assigned, source = resolve_employee_monthly_target(db, user)
         leads_assigned = 0
@@ -75,6 +101,8 @@ class EmployeeService:
         )
         manager = getattr(user, "reports_to_manager", None)
         sales_head = getattr(user, "reports_to_sales_head", None)
+        state = getattr(user, "state", None)
+        branch = getattr(user, "branch", None)
         return EmployeeResponse(
             id=user.id,
             name=user.name,
@@ -101,6 +129,12 @@ class EmployeeService:
             reports_to_sales_head_name=(
                 sales_head.name if sales_head is not None else None
             ),
+            state_id=user.state_id,
+            state_name=state.name if state is not None else None,
+            state_code=state.state_code if state is not None else None,
+            branch_id=user.branch_id,
+            branch_name=branch.name if branch is not None else None,
+            branch_code=branch.branch_code if branch is not None else None,
             last_login=user.last_login,
             created_at=getattr(user, "created_at", None),
             updated_at=getattr(user, "updated_at", None),
@@ -113,6 +147,8 @@ class EmployeeService:
             .options(
                 joinedload(User.reports_to_manager),
                 joinedload(User.reports_to_sales_head),
+                joinedload(User.state),
+                joinedload(User.branch),
             )
             .filter(User.id == employee_id)
             .first()
@@ -128,6 +164,8 @@ class EmployeeService:
         role: str | None = None,
         sales_only: bool = False,
         all_records: bool = False,
+        state_id: int | None = None,
+        branch_id: int | None = None,
     ) -> EmployeeListResponse:
         if sales_only:
             # Dashboard / assign dropdowns: sales employees only (not mgr/head)
@@ -144,12 +182,19 @@ class EmployeeService:
             .options(
                 joinedload(User.reports_to_manager),
                 joinedload(User.reports_to_sales_head),
+                joinedload(User.state),
+                joinedload(User.branch),
             )
             .filter(User.role.in_(roles))
         )
 
         if is_active is not None:
             query = query.filter(User.is_active.is_(is_active))
+
+        if state_id is not None:
+            query = query.filter(User.state_id == state_id)
+        if branch_id is not None:
+            query = query.filter(User.branch_id == branch_id)
 
         if search:
             pattern = f"%{search.strip()}%"
@@ -229,6 +274,13 @@ class EmployeeService:
                 db, sales_head_id, UserRole.sales_head, "reportsToSalesHeadId"
             )
 
+        state_id, branch_id = EmployeeService._resolve_state_branch(
+            db,
+            payload.state_id,
+            payload.branch_id,
+            required=True,
+        )
+
         user = User(
             name=payload.name,
             email=str(payload.email).lower(),
@@ -242,6 +294,8 @@ class EmployeeService:
             monthly_sales_target=monthly_target,
             reports_to_manager_id=manager_id,
             reports_to_sales_head_id=sales_head_id,
+            state_id=state_id,
+            branch_id=branch_id,
         )
 
         try:
@@ -366,6 +420,21 @@ class EmployeeService:
                     db, sid, UserRole.sales_head, "reportsToSalesHeadId"
                 )
                 user.reports_to_sales_head_id = sid
+
+        # State/branch: required for staff; validate when either field is present
+        # or when still missing on the user.
+        touching_geo = "state_id" in data or "branch_id" in data
+        next_state = data["state_id"] if "state_id" in data else user.state_id
+        next_branch = data["branch_id"] if "branch_id" in data else user.branch_id
+        if touching_geo or user.state_id is None or user.branch_id is None:
+            sid, bid = EmployeeService._resolve_state_branch(
+                db,
+                next_state,
+                next_branch,
+                required=True,
+            )
+            user.state_id = sid
+            user.branch_id = bid
 
         db.commit()
         return EmployeeService.get(db, user.id)

@@ -42,6 +42,8 @@ def list_supervisors(
 @router.get("/members", response_model=TeamMemberListResponse)
 def list_team_members(
     supervisor_id: Optional[int] = Query(None, alias="supervisorId"),
+    state_id: Optional[int] = Query(None, alias="stateId"),
+    branch_id: Optional[int] = Query(None, alias="branchId"),
     db: Session = Depends(get_db),
     current_user: User = Depends(require_team_viewer),
 ):
@@ -51,7 +53,11 @@ def list_team_members(
     """
     try:
         return TeamService.list_members(
-            db, current_user, supervisor_id=supervisor_id
+            db,
+            current_user,
+            supervisor_id=supervisor_id,
+            state_id=state_id,
+            branch_id=branch_id,
         )
     except ValueError as ex:
         raise HTTPException(status_code=400, detail=str(ex)) from ex
@@ -101,6 +107,8 @@ def team_overview(
     date_to: Optional[date] = Query(None, alias="dateTo"),
     employee_id: Optional[int] = Query(None, alias="employeeId"),
     supervisor_id: Optional[int] = Query(None, alias="supervisorId"),
+    state_id: Optional[int] = Query(None, alias="stateId"),
+    branch_id: Optional[int] = Query(None, alias="branchId"),
     db: Session = Depends(get_db),
     current_user: User = Depends(require_team_viewer),
 ):
@@ -117,6 +125,8 @@ def team_overview(
             date_to=date_to,
             employee_id=employee_id,
             supervisor_id=supervisor_id,
+            state_id=state_id,
+            branch_id=branch_id,
         )
     except ValueError as ex:
         raise HTTPException(status_code=400, detail=str(ex)) from ex
@@ -128,6 +138,8 @@ def team_sales(
     date_to: Optional[date] = Query(None, alias="dateTo"),
     employee_id: Optional[int] = Query(None, alias="employeeId"),
     supervisor_id: Optional[int] = Query(None, alias="supervisorId"),
+    state_id: Optional[int] = Query(None, alias="stateId"),
+    branch_id: Optional[int] = Query(None, alias="branchId"),
     db: Session = Depends(get_db),
     current_user: User = Depends(require_team_viewer),
 ):
@@ -139,6 +151,8 @@ def team_sales(
             date_to=date_to,
             employee_id=employee_id,
             supervisor_id=supervisor_id,
+            state_id=state_id,
+            branch_id=branch_id,
         )
     except ValueError as ex:
         raise HTTPException(status_code=400, detail=str(ex)) from ex
@@ -150,6 +164,8 @@ def team_performance(
     date_to: Optional[date] = Query(None, alias="dateTo"),
     employee_id: Optional[int] = Query(None, alias="employeeId"),
     supervisor_id: Optional[int] = Query(None, alias="supervisorId"),
+    state_id: Optional[int] = Query(None, alias="stateId"),
+    branch_id: Optional[int] = Query(None, alias="branchId"),
     db: Session = Depends(get_db),
     current_user: User = Depends(require_team_viewer),
 ):
@@ -161,6 +177,8 @@ def team_performance(
             date_to=date_to,
             employee_id=employee_id,
             supervisor_id=supervisor_id,
+            state_id=state_id,
+            branch_id=branch_id,
         )
     except ValueError as ex:
         raise HTTPException(status_code=400, detail=str(ex)) from ex
@@ -172,6 +190,8 @@ def team_payments(
     date_to: Optional[date] = Query(None, alias="dateTo"),
     employee_id: Optional[int] = Query(None, alias="employeeId"),
     supervisor_id: Optional[int] = Query(None, alias="supervisorId"),
+    state_id: Optional[int] = Query(None, alias="stateId"),
+    branch_id: Optional[int] = Query(None, alias="branchId"),
     db: Session = Depends(get_db),
     current_user: User = Depends(require_team_viewer),
 ):
@@ -183,6 +203,8 @@ def team_payments(
             date_to=date_to,
             employee_id=employee_id,
             supervisor_id=supervisor_id,
+            state_id=state_id,
+            branch_id=branch_id,
         )
     except ValueError as ex:
         raise HTTPException(status_code=400, detail=str(ex)) from ex
@@ -194,6 +216,8 @@ def team_analytics(
     date_to: Optional[date] = Query(None, alias="dateTo"),
     employee_id: Optional[int] = Query(None, alias="employeeId"),
     supervisor_id: Optional[int] = Query(None, alias="supervisorId"),
+    state_id: Optional[int] = Query(None, alias="stateId"),
+    branch_id: Optional[int] = Query(None, alias="branchId"),
     db: Session = Depends(get_db),
     current_user: User = Depends(require_team_viewer),
 ):
@@ -205,6 +229,8 @@ def team_analytics(
             date_to=date_to,
             employee_id=employee_id,
             supervisor_id=supervisor_id,
+            state_id=state_id,
+            branch_id=branch_id,
         )
     except ValueError as ex:
         raise HTTPException(status_code=400, detail=str(ex)) from ex
@@ -218,6 +244,8 @@ def team_exports(
     date_to: Optional[date] = Query(None, alias="dateTo"),
     employee_id: Optional[int] = Query(None, alias="employeeId"),
     supervisor_id: Optional[int] = Query(None, alias="supervisorId"),
+    state_id: Optional[int] = Query(None, alias="stateId"),
+    branch_id: Optional[int] = Query(None, alias="branchId"),
     db: Session = Depends(get_db),
     current_user: User = Depends(require_team_viewer),
 ):
@@ -232,6 +260,8 @@ def team_exports(
             date_to=date_to,
             employee_id=employee_id,
             supervisor_id=supervisor_id,
+            state_id=state_id,
+            branch_id=branch_id,
         )
     except ValueError as ex:
         raise HTTPException(status_code=400, detail=str(ex)) from ex

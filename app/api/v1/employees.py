@@ -70,6 +70,8 @@ def list_employees(
         ),
     ),
     all_records: bool = Query(False, alias="all"),
+    state_id: Optional[int] = Query(None, alias="stateId"),
+    branch_id: Optional[int] = Query(None, alias="branchId"),
     db: Session = Depends(get_db),
     current_user: User = Depends(require_admin_or_accountant),
 ):
@@ -98,6 +100,8 @@ def list_employees(
         role=role,
         sales_only=sales_only,
         all_records=all_records,
+        state_id=state_id,
+        branch_id=branch_id,
     )
 
 

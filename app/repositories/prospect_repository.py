@@ -3,8 +3,10 @@ from typing import List, Optional, Sequence
 from sqlalchemy import func
 from sqlalchemy.orm import Session, joinedload, selectinload
 
+from app.core.geo_scope import apply_prospect_assignee_geo
 from app.db.models.payment import Payment
 from app.db.models.prospect import Prospect
+from app.db.models.user import User
 
 
 class ProspectRepository:
@@ -14,7 +16,8 @@ class ProspectRepository:
         return (
             selectinload(Prospect.payments).joinedload(Payment.verified_by),
             selectinload(Prospect.documents),
-            joinedload(Prospect.assigned_to),
+            joinedload(Prospect.assigned_to).joinedload(User.state),
+            joinedload(Prospect.assigned_to).joinedload(User.branch),
             joinedload(Prospect.created_by),
             joinedload(Prospect.updated_by),
             joinedload(Prospect.course),
@@ -64,6 +67,8 @@ class ProspectRepository:
         admission_stage: str | None = None,
         admission_stages: Sequence[str] | None = None,
         assigned_to_id: int | None = None,
+        state_id: int | None = None,
+        branch_id: int | None = None,
         course_id: int | None = None,
         created_from=None,
         created_to=None,
@@ -75,6 +80,8 @@ class ProspectRepository:
             admission_stage=admission_stage,
             admission_stages=admission_stages,
             assigned_to_id=assigned_to_id,
+            state_id=state_id,
+            branch_id=branch_id,
             course_id=course_id,
             created_from=created_from,
             created_to=created_to,
@@ -97,6 +104,8 @@ class ProspectRepository:
         admission_stage: str | None = None,
         admission_stages: Sequence[str] | None = None,
         assigned_to_id: int | None = None,
+        state_id: int | None = None,
+        branch_id: int | None = None,
         course_id: int | None = None,
     ) -> List[Prospect]:
         return (
@@ -107,6 +116,8 @@ class ProspectRepository:
                 admission_stage=admission_stage,
                 admission_stages=admission_stages,
                 assigned_to_id=assigned_to_id,
+                state_id=state_id,
+                branch_id=branch_id,
                 course_id=course_id,
             )
             .order_by(Prospect.created_at.desc())
@@ -121,6 +132,8 @@ class ProspectRepository:
         admission_stage: str | None = None,
         admission_stages: Sequence[str] | None = None,
         assigned_to_id: int | None = None,
+        state_id: int | None = None,
+        branch_id: int | None = None,
         course_id: int | None = None,
         created_from=None,
         created_to=None,
@@ -131,6 +144,10 @@ class ProspectRepository:
 
         if assigned_to_id is not None:
             query = query.filter(Prospect.assigned_to_id == assigned_to_id)
+
+        query = apply_prospect_assignee_geo(
+            query, state_id=state_id, branch_id=branch_id
+        )
 
         if course_id is not None:
             query = query.filter(Prospect.course_id == course_id)

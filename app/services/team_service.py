@@ -30,15 +30,22 @@ class TeamService:
         *,
         employee_id: Optional[int] = None,
         supervisor_id: Optional[int] = None,
+        state_id: Optional[int] = None,
+        branch_id: Optional[int] = None,
     ) -> list[int]:
         """
         Resolve which users are in scope for the viewer.
         Admin: all active users (employees, managers, sales_heads).
         Manager/sales_head: only employees who report to them.
         """
+        from app.core.geo_scope import apply_user_geo_filter
+
         query = db.query(User.id).filter(
             User.role.in_([UserRole.employee, UserRole.manager, UserRole.sales_head]),
             User.is_active.is_(True),
+        )
+        query = apply_user_geo_filter(
+            query, state_id=state_id, branch_id=branch_id
         )
 
         if is_admin(viewer):
@@ -78,6 +85,10 @@ class TeamService:
             emp = UserRepository.get_by_id(db, employee_id)
             if not emp or not emp.is_active:
                 raise ValueError("employeeId must be an active user.")
+            if state_id is not None and emp.state_id != state_id:
+                raise ValueError("employeeId is not in the selected state.")
+            if branch_id is not None and emp.branch_id != branch_id:
+                raise ValueError("employeeId is not in the selected branch.")
             return [employee_id]
 
         if employee_id not in ids:
@@ -121,9 +132,15 @@ class TeamService:
         viewer: User,
         *,
         supervisor_id: Optional[int] = None,
+        state_id: Optional[int] = None,
+        branch_id: Optional[int] = None,
     ) -> dict:
         ids = TeamService.resolve_team_member_ids(
-            db, viewer, supervisor_id=supervisor_id
+            db,
+            viewer,
+            supervisor_id=supervisor_id,
+            state_id=state_id,
+            branch_id=branch_id,
         )
         if not ids:
             return {"items": [], "total": 0}
@@ -300,12 +317,16 @@ class TeamService:
         date_to: Optional[date] = None,
         employee_id: Optional[int] = None,
         supervisor_id: Optional[int] = None,
+        state_id: Optional[int] = None,
+        branch_id: Optional[int] = None,
     ) -> dict:
         ids = TeamService.resolve_team_member_ids(
             db,
             viewer,
             employee_id=employee_id,
             supervisor_id=supervisor_id,
+            state_id=state_id,
+            branch_id=branch_id,
         )
         items = []
         high = average = low = 0
@@ -398,12 +419,16 @@ class TeamService:
         date_to: Optional[date] = None,
         employee_id: Optional[int] = None,
         supervisor_id: Optional[int] = None,
+        state_id: Optional[int] = None,
+        branch_id: Optional[int] = None,
     ) -> dict:
         ids = TeamService.resolve_team_member_ids(
             db,
             viewer,
             employee_id=employee_id,
             supervisor_id=supervisor_id,
+            state_id=state_id,
+            branch_id=branch_id,
         )
         items=[]
         total_revenue = Decimal("0")
@@ -521,12 +546,16 @@ class TeamService:
         date_to: Optional[date] = None,
         employee_id: Optional[int] = None,
         supervisor_id: Optional[int] = None,
+        state_id: Optional[int] = None,
+        branch_id: Optional[int] = None,
     ) -> dict:
         ids = TeamService.resolve_team_member_ids(
             db,
             viewer,
             employee_id=employee_id,
             supervisor_id=supervisor_id,
+            state_id=state_id,
+            branch_id=branch_id,
         )
         collected = {
             "today": Decimal("0"),
@@ -610,12 +639,16 @@ class TeamService:
         date_to: Optional[date] = None,
         employee_id: Optional[int] = None,
         supervisor_id: Optional[int] = None,
+        state_id: Optional[int] = None,
+        branch_id: Optional[int] = None,
     ) -> dict:
         ids = TeamService.resolve_team_member_ids(
             db,
             viewer,
             employee_id=employee_id,
             supervisor_id=supervisor_id,
+            state_id=state_id,
+            branch_id=branch_id,
         )
         stage_map: dict[str, int] = {}
         total_admissions = 0
@@ -705,6 +738,8 @@ class TeamService:
         date_to: Optional[date] = None,
         employee_id: Optional[int] = None,
         supervisor_id: Optional[int] = None,
+        state_id: Optional[int] = None,
+        branch_id: Optional[int] = None,
     ) -> dict:
         perf = TeamService.performance(
             db,
@@ -713,6 +748,8 @@ class TeamService:
             date_to=date_to,
             employee_id=employee_id,
             supervisor_id=supervisor_id,
+            state_id=state_id,
+            branch_id=branch_id,
         )
         sales = TeamService.sales(
             db,
@@ -721,6 +758,8 @@ class TeamService:
             date_to=date_to,
             employee_id=employee_id,
             supervisor_id=supervisor_id,
+            state_id=state_id,
+            branch_id=branch_id,
         )
         return {
             "team_size": perf["total"],

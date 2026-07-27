@@ -16,6 +16,9 @@ from app.db.session import get_db
 from app.dependencies.auth import get_current_user
 from app.dependencies.permissions import require_admin
 from app.schemas.master import (
+    BranchCreate,
+    BranchResponse,
+    BranchUpdate,
     BulkEmployeeMonthlyTargetRequest,
     BulkEmployeeMonthlyTargetResponse,
     CourseCreate,
@@ -33,6 +36,9 @@ from app.schemas.master import (
     SpecializationCreate,
     SpecializationResponse,
     SpecializationUpdate,
+    StateCreate,
+    StateResponse,
+    StateUpdate,
     UpdateIncentiveSlabsRequest,
 )
 from app.services.master_service import MasterService
@@ -212,6 +218,127 @@ def delete_specialization(
     except ValueError as ex:
         raise HTTPException(status_code=404, detail=str(ex)) from ex
     return {"message": "Specialization deleted."}
+
+
+# ==========================================================
+# States — read: all authenticated; write: admin
+# ==========================================================
+
+@router.get("/states", response_model=list[StateResponse])
+def get_states(
+    active_only: bool = Query(False, alias="activeOnly"),
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    return MasterService.get_states(db, active_only=active_only)
+
+
+@router.post(
+    "/states",
+    response_model=StateResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+def create_state(
+    payload: StateCreate,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_admin),
+):
+    try:
+        return MasterService.create_state(db, payload)
+    except ValueError as ex:
+        raise HTTPException(status_code=400, detail=str(ex)) from ex
+
+
+@router.put("/states/{state_id}", response_model=StateResponse)
+def update_state(
+    state_id: int,
+    payload: StateUpdate,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_admin),
+):
+    try:
+        return MasterService.update_state(db, state_id, payload)
+    except ValueError as ex:
+        detail = str(ex)
+        code = 404 if detail == "State not found." else 400
+        raise HTTPException(status_code=code, detail=detail) from ex
+
+
+@router.delete("/states/{state_id}")
+def delete_state(
+    state_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_admin),
+):
+    try:
+        MasterService.delete_state(db, state_id)
+    except ValueError as ex:
+        detail = str(ex)
+        code = 404 if detail == "State not found." else 400
+        raise HTTPException(status_code=code, detail=detail) from ex
+    return {"message": "State deleted."}
+
+
+# ==========================================================
+# Branches — read: all authenticated; write: admin
+# ==========================================================
+
+@router.get("/branches", response_model=list[BranchResponse])
+def get_branches(
+    active_only: bool = Query(False, alias="activeOnly"),
+    state_id: int | None = Query(None, alias="stateId"),
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    return MasterService.get_branches(
+        db, active_only=active_only, state_id=state_id
+    )
+
+
+@router.post(
+    "/branches",
+    response_model=BranchResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+def create_branch(
+    payload: BranchCreate,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_admin),
+):
+    try:
+        return MasterService.create_branch(db, payload)
+    except ValueError as ex:
+        raise HTTPException(status_code=400, detail=str(ex)) from ex
+
+
+@router.put("/branches/{branch_id}", response_model=BranchResponse)
+def update_branch(
+    branch_id: int,
+    payload: BranchUpdate,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_admin),
+):
+    try:
+        return MasterService.update_branch(db, branch_id, payload)
+    except ValueError as ex:
+        detail = str(ex)
+        code = 404 if detail == "Branch not found." else 400
+        raise HTTPException(status_code=code, detail=detail) from ex
+
+
+@router.delete("/branches/{branch_id}")
+def delete_branch(
+    branch_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_admin),
+):
+    try:
+        MasterService.delete_branch(db, branch_id)
+    except ValueError as ex:
+        detail = str(ex)
+        code = 404 if detail == "Branch not found." else 400
+        raise HTTPException(status_code=code, detail=detail) from ex
+    return {"message": "Branch deleted."}
 
 
 # ==========================================================

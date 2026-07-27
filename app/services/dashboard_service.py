@@ -42,6 +42,8 @@ from app.schemas.dashboard import (
 def _metrics_for_scope(
     db: Session,
     employee_id: Optional[int],
+    state_id: Optional[int] = None,
+    branch_id: Optional[int] = None,
     date_from: Optional[date] = None,
     date_to: Optional[date] = None,
 ) -> dict:
@@ -49,33 +51,41 @@ def _metrics_for_scope(
     lead_counts = AnalyticsRepository.lead_counts_summary(
         db,
         employee_id=employee_id,
+        state_id=state_id,
+        branch_id=branch_id,
         custom_from=date_from,
         custom_to=date_to,
     )
     payment_status = AnalyticsRepository.payment_status_summary(
-        db, employee_id=employee_id, date_from=date_from, date_to=date_to,
+        db, employee_id=employee_id, state_id=state_id, branch_id=branch_id, date_from=date_from, date_to=date_to,
     )
     payment_collected = AnalyticsRepository.payment_collected_summary(
         db,
         employee_id=employee_id,
+        state_id=state_id,
+        branch_id=branch_id,
         custom_from=date_from,
         custom_to=date_to,
     )
     stages = AnalyticsRepository.leads_by_stage(
         db,
         employee_id=employee_id,
+        state_id=state_id,
+        branch_id=branch_id,
         date_from=date_from,
         date_to=date_to,
     )
     admission_stages = AnalyticsRepository.leads_by_admission_stage(
         db,
         employee_id=employee_id,
+        state_id=state_id,
+        branch_id=branch_id,
         date_from=date_from,
         date_to=date_to,
     )
 
     exam = AnalyticsRepository.exam_stats(
-        db, employee_id=employee_id, date_from=date_from, date_to=date_to,
+        db, employee_id=employee_id, state_id=state_id, branch_id=branch_id, date_from=date_from, date_to=date_to,
     )
 
     # When custom date range: use filtered lead count for targets/incentives
@@ -83,11 +93,15 @@ def _metrics_for_scope(
     target = AnalyticsRepository.sales_target_summary(
         db,
         employee_id=employee_id,
+        state_id=state_id,
+        branch_id=branch_id,
         achieved=Decimal(str(filtered_leads)),
     )
     incentive = AnalyticsRepository.incentive_status(
         db,
         employee_id=employee_id,
+        state_id=state_id,
+        branch_id=branch_id,
         lead_count=filtered_leads,
     )
 
@@ -114,14 +128,20 @@ def _metrics_for_scope(
 def _employee_overviews(
     db: Session,
     employee_id: Optional[int] = None,
+    state_id: Optional[int] = None,
+    branch_id: Optional[int] = None,
     date_from: Optional[date] = None,
     date_to: Optional[date] = None,
 ) -> list[EmployeeOverviewItem]:
     items: list[EmployeeOverviewItem] = []
-    for user in AnalyticsRepository.list_active_employees(db, employee_id):
+    for user in AnalyticsRepository.list_active_employees(
+        db, employee_id=employee_id, state_id=state_id, branch_id=branch_id
+    ):
         metrics = _metrics_for_scope(
             db,
             employee_id=user.id,
+            state_id=state_id,
+            branch_id=branch_id,
             date_from=date_from,
             date_to=date_to,
         )
@@ -231,10 +251,14 @@ class DashboardService:
         employee_id: int,
         date_from: Optional[date] = None,
         date_to: Optional[date] = None,
+        state_id: Optional[int] = None,
+        branch_id: Optional[int] = None,
     ) -> EmployeeDashboardResponse:
         metrics = _metrics_for_scope(
             db,
             employee_id=employee_id,
+            state_id=state_id,
+            branch_id=branch_id,
             date_from=date_from,
             date_to=date_to,
         )
@@ -246,16 +270,22 @@ class DashboardService:
         date_from: Optional[date] = None,
         date_to: Optional[date] = None,
         employee_id: Optional[int] = None,
+        state_id: Optional[int] = None,
+        branch_id: Optional[int] = None,
     ) -> AdminDashboardResponse:
         overview = _metrics_for_scope(
             db,
             employee_id=employee_id,
+            state_id=state_id,
+            branch_id=branch_id,
             date_from=date_from,
             date_to=date_to,
         )
         employees = _employee_overviews(
             db,
             employee_id=employee_id,
+            state_id=state_id,
+            branch_id=branch_id,
             date_from=date_from,
             date_to=date_to,
         )
@@ -264,6 +294,8 @@ class DashboardService:
         slab_progress = AnalyticsRepository.incentive_status(
             db,
             employee_id=employee_id,
+            state_id=state_id,
+            branch_id=branch_id,
         )
         total_incentive = sum(
             (e.incentive.amount for e in employees), Decimal("0")
@@ -283,12 +315,16 @@ class DashboardService:
             date_from=date_from,
             date_to=date_to,
             employee_id=employee_id,
+            state_id=state_id,
+            branch_id=branch_id,
         )
         top = AnalyticsRepository.employee_performance(
             db,
             date_from=date_from,
             date_to=date_to,
             employee_id=employee_id,
+            state_id=state_id,
+            branch_id=branch_id,
             limit=5,
         )
         monthly = AnalyticsRepository.monthly_sales(
@@ -296,6 +332,8 @@ class DashboardService:
             date_from=date_from,
             date_to=date_to,
             employee_id=employee_id,
+            state_id=state_id,
+            branch_id=branch_id,
             months=6,
         )
         monthly_items = [
@@ -322,6 +360,8 @@ class DashboardService:
         conversion_rate = AnalyticsRepository.conversion_rate(
             db,
             employee_id=employee_id,
+            state_id=state_id,
+            branch_id=branch_id,
             date_from=date_from,
             date_to=date_to,
         )
@@ -332,17 +372,21 @@ class DashboardService:
                 1
                 if employee_id is not None
                 else AnalyticsRepository.count_employees(
-                    db, date_from=date_from, date_to=date_to
+                    db, date_from=date_from, date_to=date_to,
+                    state_id=state_id, branch_id=branch_id,
                 )
             ),
             total_users=AnalyticsRepository.count_users(
-                db, date_from=date_from, date_to=date_to
+                db, date_from=date_from, date_to=date_to,
+                state_id=state_id, branch_id=branch_id,
             ),
             total_revenue=AnalyticsRepository.payment_collected(
                 db,
                 date_from=date_from,
                 date_to=date_to,
                 employee_id=employee_id,
+            state_id=state_id,
+            branch_id=branch_id,
             ),
             leads_this_week=lead_counts.this_week,
             conversion_rate=conversion_rate,
@@ -367,6 +411,8 @@ class ReportService:
         employee_id: int,
         date_from: Optional[date] = None,
         date_to: Optional[date] = None,
+        state_id: Optional[int] = None,
+        branch_id: Optional[int] = None,
         stage: Optional[str] = None,
         source: Optional[str] = None,
     ) -> EmployeeReportResponse:
@@ -378,12 +424,16 @@ class ReportService:
         metrics = _metrics_for_scope(
             db,
             employee_id=employee_id,
+            state_id=state_id,
+            branch_id=branch_id,
             date_from=date_from,
             date_to=date_to,
         )
         leads_created = AnalyticsRepository.count_leads(
             db,
             employee_id=employee_id,
+            state_id=state_id,
+            branch_id=branch_id,
             date_from=date_from,
             date_to=date_to,
             stage=stage,
@@ -392,6 +442,8 @@ class ReportService:
         leads_converted = AnalyticsRepository.count_leads(
             db,
             employee_id=employee_id,
+            state_id=state_id,
+            branch_id=branch_id,
             date_from=date_from,
             date_to=date_to,
             stage="won",
@@ -400,6 +452,8 @@ class ReportService:
         revenue = AnalyticsRepository.payment_collected(
             db,
             employee_id=employee_id,
+            state_id=state_id,
+            branch_id=branch_id,
             date_from=date_from,
             date_to=date_to,
         )
@@ -409,6 +463,8 @@ class ReportService:
         follow_ups = AnalyticsRepository.follow_up_activity_count(
             db,
             employee_id=employee_id,
+            state_id=state_id,
+            branch_id=branch_id,
             date_from=date_from,
             date_to=date_to,
         )
@@ -431,24 +487,32 @@ class ReportService:
         date_from: Optional[date] = None,
         date_to: Optional[date] = None,
         employee_id: Optional[int] = None,
+        state_id: Optional[int] = None,
+        branch_id: Optional[int] = None,
         stage: Optional[str] = None,
         source: Optional[str] = None,
     ) -> AdminReportResponse:
         overview = _metrics_for_scope(
             db,
             employee_id=employee_id,
+            state_id=state_id,
+            branch_id=branch_id,
             date_from=date_from,
             date_to=date_to,
         )
         employees = _employee_overviews(
             db,
             employee_id=employee_id,
+            state_id=state_id,
+            branch_id=branch_id,
             date_from=date_from,
             date_to=date_to,
         )
         slab_progress = AnalyticsRepository.incentive_status(
             db,
             employee_id=employee_id,
+            state_id=state_id,
+            branch_id=branch_id,
         )
         total_incentive = sum(
             (e.incentive.amount for e in employees), Decimal("0")
@@ -468,6 +532,8 @@ class ReportService:
             date_from=date_from,
             date_to=date_to,
             employee_id=employee_id,
+            state_id=state_id,
+            branch_id=branch_id,
             stage=stage,
             source=source,
         )
@@ -477,12 +543,16 @@ class ReportService:
         monthly = AnalyticsRepository.monthly_sales(
             db,
             employee_id=employee_id,
+            state_id=state_id,
+            branch_id=branch_id,
             date_from=date_from,
             date_to=date_to,
         )
         sources = AnalyticsRepository.lead_source_analysis(
             db,
             employee_id=employee_id,
+            state_id=state_id,
+            branch_id=branch_id,
             date_from=date_from,
             date_to=date_to,
             stage=stage,
@@ -490,6 +560,8 @@ class ReportService:
         win_loss = AnalyticsRepository.win_loss_analysis(
             db,
             employee_id=employee_id,
+            state_id=state_id,
+            branch_id=branch_id,
             date_from=date_from,
             date_to=date_to,
             source=source,
@@ -529,7 +601,8 @@ class ReportService:
                 1
                 if employee_id is not None
                 else AnalyticsRepository.count_employees(
-                    db, date_from=date_from, date_to=date_to
+                    db, date_from=date_from, date_to=date_to,
+                    state_id=state_id, branch_id=branch_id,
                 )
             ),
             total_revenue=AnalyticsRepository.payment_collected(
@@ -537,6 +610,8 @@ class ReportService:
                 date_from=date_from,
                 date_to=date_to,
                 employee_id=employee_id,
+            state_id=state_id,
+            branch_id=branch_id,
             ),
             employee_performance=enriched,
             sales_by_month=[
@@ -561,16 +636,22 @@ class ReportService:
         date_from: Optional[date] = None,
         date_to: Optional[date] = None,
         employee_id: Optional[int] = None,
+        state_id: Optional[int] = None,
+        branch_id: Optional[int] = None,
     ) -> RevenueReportResponse:
         collected = AnalyticsRepository.payment_collected_summary(
             db,
             employee_id=employee_id,
+            state_id=state_id,
+            branch_id=branch_id,
             custom_from=date_from,
             custom_to=date_to,
         )
         monthly = AnalyticsRepository.monthly_sales(
             db,
             employee_id=employee_id,
+            state_id=state_id,
+            branch_id=branch_id,
             date_from=date_from,
             date_to=date_to,
         )
@@ -579,6 +660,8 @@ class ReportService:
             date_from=date_from,
             date_to=date_to,
             employee_id=employee_id,
+            state_id=state_id,
+            branch_id=branch_id,
         )
         enriched = _enrich_performance(
             db, performance, date_from=date_from, date_to=date_to
@@ -587,6 +670,8 @@ class ReportService:
             total_revenue=AnalyticsRepository.payment_collected(
                 db,
                 employee_id=employee_id,
+                state_id=state_id,
+                branch_id=branch_id,
                 date_from=date_from,
                 date_to=date_to,
             ),
@@ -623,6 +708,8 @@ class ReportService:
         date_from: Optional[date] = None,
         date_to: Optional[date] = None,
         employee_id: Optional[int] = None,
+        state_id: Optional[int] = None,
+        branch_id: Optional[int] = None,
         stage: Optional[str] = None,
         source: Optional[str] = None,
     ) -> EmployeePerformanceReportResponse:
@@ -631,6 +718,8 @@ class ReportService:
             date_from=date_from,
             date_to=date_to,
             employee_id=employee_id,
+            state_id=state_id,
+            branch_id=branch_id,
             stage=stage,
             source=source,
         )
@@ -648,11 +737,15 @@ class ReportService:
         date_from: Optional[date] = None,
         date_to: Optional[date] = None,
         employee_id: Optional[int] = None,
+        state_id: Optional[int] = None,
+        branch_id: Optional[int] = None,
         source: Optional[str] = None,
     ) -> LeadsByStageReportResponse:
         stages = AnalyticsRepository.leads_by_stage(
             db,
             employee_id=employee_id,
+            state_id=state_id,
+            branch_id=branch_id,
             date_from=date_from,
             date_to=date_to,
             source=source,
@@ -668,11 +761,15 @@ class ReportService:
         date_from: Optional[date] = None,
         date_to: Optional[date] = None,
         employee_id: Optional[int] = None,
+        state_id: Optional[int] = None,
+        branch_id: Optional[int] = None,
         source: Optional[str] = None,
     ) -> LeadsByAdminStageReportResponse:
         admission_stage = AnalyticsRepository.leads_by_admission_stage(
             db,
             employee_id=employee_id,
+            state_id=state_id,
+            branch_id=branch_id,
             date_from=date_from,
             date_to=date_to,
             source=source,
@@ -720,13 +817,18 @@ class ReportService:
         db: Session,
         month: Optional[str] = None,
         employee_id: Optional[int] = None,
+        state_id: Optional[int] = None,
+        branch_id: Optional[int] = None,
     ) -> IncentiveReportResponse:
         # 1. Parse date ranges
         date_from, date_to, month_label = ReportService._parse_month(month)
 
         # 2. Fetch base employees list
         employees = AnalyticsRepository.list_active_employees(
-            db, employee_id=employee_id
+            db,
+            employee_id=employee_id,
+            state_id=state_id,
+            branch_id=branch_id,
         )
         # 3. Fallback logic if explicit ID is missing/inactive
         # If filtering a specific id that is inactive/missing, still try that user

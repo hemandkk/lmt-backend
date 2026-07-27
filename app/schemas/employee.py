@@ -34,6 +34,8 @@ class EmployeeCreate(BaseModel):
     reports_to_sales_head_id: Optional[int] = Field(
         default=None, alias="reportsToSalesHeadId"
     )
+    state_id: Optional[int] = Field(default=None, alias="stateId")
+    branch_id: Optional[int] = Field(default=None, alias="branchId")
 
     @field_validator("role", mode="before")
     @classmethod
@@ -45,7 +47,11 @@ class EmployeeCreate(BaseModel):
         return normalize_role(value).value
 
     @field_validator(
-        "reports_to_manager_id", "reports_to_sales_head_id", mode="before"
+        "reports_to_manager_id",
+        "reports_to_sales_head_id",
+        "state_id",
+        "branch_id",
+        mode="before",
     )
     @classmethod
     def empty_supervisor_to_none(cls, value: Any) -> Any:
@@ -80,6 +86,8 @@ class EmployeeUpdate(BaseModel):
     reports_to_sales_head_id: Optional[int] = Field(
         default=None, alias="reportsToSalesHeadId"
     )
+    state_id: Optional[int] = Field(default=None, alias="stateId")
+    branch_id: Optional[int] = Field(default=None, alias="branchId")
 
     @field_validator("role", mode="before")
     @classmethod
@@ -91,7 +99,11 @@ class EmployeeUpdate(BaseModel):
         return normalize_role(value).value
 
     @field_validator(
-        "reports_to_manager_id", "reports_to_sales_head_id", mode="before"
+        "reports_to_manager_id",
+        "reports_to_sales_head_id",
+        "state_id",
+        "branch_id",
+        mode="before",
     )
     @classmethod
     def empty_supervisor_to_none(cls, value: Any) -> Any:
@@ -138,6 +150,16 @@ class EmployeeResponse(BaseModel):
     )
     reports_to_sales_head_name: Optional[str] = Field(
         default=None, serialization_alias="reportsToSalesHeadName"
+    )
+    state_id: Optional[int] = Field(default=None, serialization_alias="stateId")
+    state_name: Optional[str] = Field(default=None, serialization_alias="stateName")
+    state_code: Optional[str] = Field(default=None, serialization_alias="stateCode")
+    branch_id: Optional[int] = Field(default=None, serialization_alias="branchId")
+    branch_name: Optional[str] = Field(
+        default=None, serialization_alias="branchName"
+    )
+    branch_code: Optional[str] = Field(
+        default=None, serialization_alias="branchCode"
     )
     last_login: Optional[datetime] = Field(
         default=None, serialization_alias="lastLogin"

@@ -85,6 +85,20 @@ class User(TimestampMixin, Base):
         index=True,
     )
 
+    state_id = Column(
+        Integer,
+        ForeignKey("states.id", ondelete="RESTRICT"),
+        nullable=True,
+        index=True,
+    )
+
+    branch_id = Column(
+        Integer,
+        ForeignKey("branches.id", ondelete="RESTRICT"),
+        nullable=True,
+        index=True,
+    )
+
     last_login = Column(
         DateTime(timezone=True)
     )
@@ -122,4 +136,16 @@ class User(TimestampMixin, Base):
         remote_side=[id],
         foreign_keys=[reports_to_sales_head_id],
         backref="sales_head_employees",
+    )
+
+    state = relationship(
+        "State",
+        back_populates="users",
+        foreign_keys=[state_id],
+    )
+
+    branch = relationship(
+        "Branch",
+        back_populates="users",
+        foreign_keys=[branch_id],
     )

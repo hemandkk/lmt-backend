@@ -93,19 +93,24 @@ def admin_report(
     date_from: Optional[date] = Query(None, alias="dateFrom"),
     date_to: Optional[date] = Query(None, alias="dateTo"),
     employee_id: Optional[int] = Query(None, alias="employeeId"),
+    state_id: Optional[int] = Query(None, alias="stateId"),
+    branch_id: Optional[int] = Query(None, alias="branchId"),
     stage: Optional[str] = None,
     source: Optional[str] = None,
     db: Session = Depends(get_db),
     current_user: User = Depends(require_admin),
 ):
     """
-    Admin reports — all data, or filter by employeeId / stage / source / dates.
+    Admin reports — all data, or filter by employeeId / stateId / branchId /
+    stage / source / dates.
     """
     return ReportService.admin_report(
         db,
         date_from=date_from,
         date_to=date_to,
         employee_id=employee_id,
+        state_id=state_id,
+        branch_id=branch_id,
         stage=stage,
         source=source,
     )
@@ -116,6 +121,8 @@ def revenue_report(
     date_from: Optional[date] = Query(None, alias="dateFrom"),
     date_to: Optional[date] = Query(None, alias="dateTo"),
     employee_id: Optional[int] = Query(None, alias="employeeId"),
+    state_id: Optional[int] = Query(None, alias="stateId"),
+    branch_id: Optional[int] = Query(None, alias="branchId"),
     db: Session = Depends(get_db),
     current_user: User = Depends(require_admin),
 ):
@@ -125,6 +132,8 @@ def revenue_report(
         date_from=date_from,
         date_to=date_to,
         employee_id=employee_id,
+        state_id=state_id,
+        branch_id=branch_id,
     )
 
 
@@ -136,6 +145,8 @@ def employee_performance_report(
     date_from: Optional[date] = Query(None, alias="dateFrom"),
     date_to: Optional[date] = Query(None, alias="dateTo"),
     employee_id: Optional[int] = Query(None, alias="employeeId"),
+    state_id: Optional[int] = Query(None, alias="stateId"),
+    branch_id: Optional[int] = Query(None, alias="branchId"),
     stage: Optional[str] = None,
     source: Optional[str] = None,
     db: Session = Depends(get_db),
@@ -147,6 +158,8 @@ def employee_performance_report(
         date_from=date_from,
         date_to=date_to,
         employee_id=employee_id,
+        state_id=state_id,
+        branch_id=branch_id,
         stage=stage,
         source=source,
     )
@@ -160,6 +173,8 @@ def leads_by_stage_report(
     date_from: Optional[date] = Query(None, alias="dateFrom"),
     date_to: Optional[date] = Query(None, alias="dateTo"),
     employee_id: Optional[int] = Query(None, alias="employeeId"),
+    state_id: Optional[int] = Query(None, alias="stateId"),
+    branch_id: Optional[int] = Query(None, alias="branchId"),
     source: Optional[str] = None,
     db: Session = Depends(get_db),
     current_user: User = Depends(require_admin),
@@ -170,8 +185,11 @@ def leads_by_stage_report(
         date_from=date_from,
         date_to=date_to,
         employee_id=employee_id,
+        state_id=state_id,
+        branch_id=branch_id,
         source=source,
     )
+
 
 @router.get(
     "/leads-by-admission-stage",
@@ -181,18 +199,23 @@ def leads_by_admission_stage_report(
     date_from: Optional[date] = Query(None, alias="dateFrom"),
     date_to: Optional[date] = Query(None, alias="dateTo"),
     employee_id: Optional[int] = Query(None, alias="employeeId"),
+    state_id: Optional[int] = Query(None, alias="stateId"),
+    branch_id: Optional[int] = Query(None, alias="branchId"),
     source: Optional[str] = None,
     db: Session = Depends(get_db),
     current_user: User = Depends(require_admin),
 ):
-    """Admin leads grouped by pipeline stage."""
+    """Admin leads grouped by admission stage."""
     return ReportService.leads_by_admission_stage_report(
         db,
         date_from=date_from,
         date_to=date_to,
         employee_id=employee_id,
+        state_id=state_id,
+        branch_id=branch_id,
         source=source,
     )
+
 
 @router.get("/incentives", response_model=IncentiveReportResponse)
 def incentives_report(
@@ -205,13 +228,15 @@ def incentives_report(
         alias="employeeId",
         description="Admin only: filter to one employee",
     ),
+    state_id: Optional[int] = Query(None, alias="stateId"),
+    branch_id: Optional[int] = Query(None, alias="branchId"),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
     """
     Incentive report for a calendar month.
     - Employee: own incentive only
-    - Admin: all employees, or ?employeeId=
+    - Admin: all employees, or ?employeeId= / stateId / branchId
     """
     scoped_employee_id = resolve_employee_scope(current_user, employee_id)
     try:
@@ -219,6 +244,8 @@ def incentives_report(
             db,
             month=month,
             employee_id=scoped_employee_id,
+            state_id=state_id if current_user.role == UserRole.admin else None,
+            branch_id=branch_id if current_user.role == UserRole.admin else None,
         )
     except ValueError as ex:
         raise HTTPException(status_code=400, detail=str(ex)) from ex

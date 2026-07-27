@@ -93,6 +93,73 @@ class SpecializationResponse(BaseModel):
     updated_at: datetime = Field(serialization_alias="updatedAt")
 
 
+# ==========================================================
+# STATE
+# ==========================================================
+
+class StateCreate(BaseModel):
+    model_config = _alias_config()
+
+    name: str
+    state_code: str = Field(..., alias="stateCode", min_length=1)
+    is_active: bool = Field(default=True, alias="active")
+
+
+class StateUpdate(BaseModel):
+    model_config = _alias_config()
+
+    name: Optional[str] = None
+    state_code: Optional[str] = Field(default=None, alias="stateCode")
+    is_active: Optional[bool] = Field(default=None, alias="active")
+
+
+class StateResponse(BaseModel):
+    model_config = _alias_config()
+
+    id: int
+    state_code: str = Field(serialization_alias="stateCode")
+    name: str
+    is_active: bool = Field(serialization_alias="active")
+    created_at: datetime = Field(serialization_alias="createdAt")
+    updated_at: datetime = Field(serialization_alias="updatedAt")
+
+
+# ==========================================================
+# BRANCH (under a state)
+# ==========================================================
+
+class BranchCreate(BaseModel):
+    model_config = _alias_config()
+
+    name: str
+    state_id: int = Field(..., alias="stateId")
+    branch_code: Optional[str] = Field(default=None, alias="branchCode")
+    is_active: bool = Field(default=True, alias="active")
+
+
+class BranchUpdate(BaseModel):
+    model_config = _alias_config()
+
+    name: Optional[str] = None
+    state_id: Optional[int] = Field(default=None, alias="stateId")
+    branch_code: Optional[str] = Field(default=None, alias="branchCode")
+    is_active: Optional[bool] = Field(default=None, alias="active")
+
+
+class BranchResponse(BaseModel):
+    model_config = _alias_config()
+
+    id: int
+    branch_code: str = Field(serialization_alias="branchCode")
+    name: str
+    state_id: int = Field(serialization_alias="stateId")
+    state_name: Optional[str] = Field(default=None, serialization_alias="stateName")
+    state_code: Optional[str] = Field(default=None, serialization_alias="stateCode")
+    is_active: bool = Field(serialization_alias="active")
+    created_at: datetime = Field(serialization_alias="createdAt")
+    updated_at: datetime = Field(serialization_alias="updatedAt")
+
+
 class MasterImportResponse(BaseModel):
     model_config = _alias_config()
 

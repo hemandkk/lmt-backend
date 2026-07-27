@@ -14,6 +14,7 @@ from app.db.models.prospect_document import DocumentType
 from app.db.models.user import User, UserRole
 from app.repositories.analytics_repository import AnalyticsRepository
 from app.repositories.prospect_repository import ProspectRepository
+from app.repositories.user_repository import UserRepository
 from app.services.dashboard_service import DashboardService
 
 
@@ -50,6 +51,8 @@ class ExportService:
         admission_stage: str | None = None,
         admission_stages: list[str] | None = None,
         assigned_to_id: int | None = None,
+        state_id: int | None = None,
+        branch_id: int | None = None,
         course_id: int | None = None,
         current_user: User | None = None,
     ) -> StreamingResponse:
@@ -69,6 +72,8 @@ class ExportService:
             stage=stage,
             admission_stages=parsed_stages,
             assigned_to_id=assigned_to_id,
+            state_id=state_id,
+            branch_id=branch_id,
             course_id=course_id,
         )
 
@@ -110,6 +115,10 @@ class ExportService:
             "Employee ID",
             "Department",
             "Designation",
+            "State",
+            "State Code",
+            "Branch",
+            "Branch Code",
             "Exam Attended",
             "Certificate Delivered",
             "Certificate Status",
@@ -286,6 +295,10 @@ class ExportService:
                 p_assigned_code,
                 extra.get("department", ""),
                 extra.get("designation", ""),
+                extra.get("state", ""),
+                extra.get("state_code", ""),
+                extra.get("branch", ""),
+                extra.get("branch_code", ""),
                 extra.get("exam_attended", ""),
                 extra.get("exam_certified", ""),
                 extra.get("certificate_status", ""),
@@ -319,6 +332,8 @@ class ExportService:
         date_from: Optional[date] = None,
         date_to: Optional[date] = None,
         employee_id: Optional[int] = None,
+        state_id: Optional[int] = None,
+        branch_id: Optional[int] = None,
         stage: Optional[str] = None,
         source: Optional[str] = None,
         current_user_id: Optional[int] = None,
@@ -351,6 +366,8 @@ class ExportService:
             date_from=date_from,
             date_to=date_to,
             employee_id=scoped_employee_id,
+            state_id=state_id,
+            branch_id=branch_id,
             stage=stage,
             source=source,
             is_admin=is_admin,
@@ -372,14 +389,18 @@ class ExportService:
         date_from: Optional[date],
         date_to: Optional[date],
         employee_id: Optional[int],
-        stage: Optional[str],
-        source: Optional[str],
-        is_admin: bool,
+        state_id: Optional[int] = None,
+        branch_id: Optional[int] = None,
+        stage: Optional[str] = None,
+        source: Optional[str] = None,
+        is_admin: bool = False,
     ) -> tuple[list[str], list[list[Any]], str]:
         if export_type == "leads":
             prospects = AnalyticsRepository.list_leads_for_export(
                 db,
                 employee_id=employee_id,
+                state_id=state_id,
+                branch_id=branch_id,
                 date_from=date_from,
                 date_to=date_to,
                 stage=stage,
@@ -420,6 +441,8 @@ class ExportService:
                 date_from=date_from,
                 date_to=date_to,
                 employee_id=employee_id,
+                state_id=state_id,
+                branch_id=branch_id,
                 stage=stage,
                 source=source,
             )
@@ -427,29 +450,43 @@ class ExportService:
                 "Employee ID",
                 "Employee Code",
                 "Name",
+                "State",
+                "State Code",
+                "Branch",
+                "Branch Code",
                 "Leads Assigned",
                 "Leads Converted",
                 "Revenue",
                 "Conversion Rate (%)",
             ]
-            rows = [
-                [
-                    d["employee_id"],
-                    d["employee_code"] or "",
-                    d["employee_name"],
-                    d["leads_assigned"],
-                    d["leads_converted"],
-                    float(d["revenue"]),
-                    d["conversion_rate"],
-                ]
-                for d in data
-            ]
+            rows = []
+            for d in data:
+                user = UserRepository.get_by_id(db, d["employee_id"])
+                state = getattr(user, "state", None) if user else None
+                branch = getattr(user, "branch", None) if user else None
+                rows.append(
+                    [
+                        d["employee_id"],
+                        d["employee_code"] or "",
+                        d["employee_name"],
+                        state.name if state else "",
+                        state.state_code if state else "",
+                        branch.name if branch else "",
+                        branch.branch_code if branch else "",
+                        d["leads_assigned"],
+                        d["leads_converted"],
+                        float(d["revenue"]),
+                        d["conversion_rate"],
+                    ]
+                )
             return headers, rows, "Employee Performance"
 
         if export_type == "sales":
             monthly = AnalyticsRepository.monthly_sales(
                 db,
                 employee_id=employee_id,
+                state_id=state_id,
+                branch_id=branch_id,
                 date_from=date_from,
                 date_to=date_to,
             )
@@ -462,7 +499,14 @@ class ExportService:
 
         # dashboard
         if is_admin and employee_id is None:
-            dash = DashboardService.admin_dashboard(db, date_from, date_to)
+            dash = DashboardService.admin_dashboard(
+                db,
+                date_from=date_from,
+                date_to=date_to,
+                employee_id=employee_id,
+                state_id=state_id,
+                branch_id=branch_id,
+            )
             headers = ["Metric", "Value"]
             rows = [
                 ["Total Employees", dash.total_employees],

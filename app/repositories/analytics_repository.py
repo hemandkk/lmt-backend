@@ -13,6 +13,7 @@ from app.core.date_utils import (
     start_of_week,
     today,
 )
+from app.core.geo_scope import apply_prospect_assignee_geo, apply_user_geo_filter
 from app.db.models.payment import Payment, PaymentStatus
 from app.db.models.prospect import Prospect, ProspectStage
 from app.db.models.user import User, UserRole
@@ -25,6 +26,8 @@ class AnalyticsRepository:
     def _prospect_base_query(
         db: Session,
         employee_id: Optional[int] = None,
+        state_id: Optional[int] = None,
+        branch_id: Optional[int] = None,
         stage: Optional[str] = None,
         source: Optional[str] = None,
         date_from: Optional[date] = None,
@@ -34,6 +37,9 @@ class AnalyticsRepository:
 
         if employee_id is not None:
             query = query.filter(Prospect.assigned_to_id == employee_id)
+        query = apply_prospect_assignee_geo(
+            query, state_id=state_id, branch_id=branch_id
+        )
 
         if stage:
             query = query.filter(Prospect.stage == stage)
@@ -53,6 +59,8 @@ class AnalyticsRepository:
     def count_leads(
         db: Session,
         employee_id: Optional[int] = None,
+        state_id: Optional[int] = None,
+        branch_id: Optional[int] = None,
         date_from: Optional[date] = None,
         date_to: Optional[date] = None,
         stage: Optional[str] = None,
@@ -61,6 +69,8 @@ class AnalyticsRepository:
         return AnalyticsRepository._prospect_base_query(
             db,
             employee_id=employee_id,
+            state_id=state_id,
+            branch_id=branch_id,
             stage=stage,
             source=source,
             date_from=date_from,
@@ -71,6 +81,8 @@ class AnalyticsRepository:
     def lead_counts_summary(
         db: Session,
         employee_id: Optional[int] = None,
+        state_id: Optional[int] = None,
+        branch_id: Optional[int] = None,
         custom_from: Optional[date] = None,
         custom_to: Optional[date] = None,
     ) -> dict:
@@ -85,18 +97,24 @@ class AnalyticsRepository:
             "today": AnalyticsRepository.count_leads(
                 db,
                 employee_id=employee_id,
+                state_id=state_id,
+                branch_id=branch_id,
                 date_from=current,
                 date_to=current,
             ),
             "this_week": AnalyticsRepository.count_leads(
                 db,
                 employee_id=employee_id,
+                state_id=state_id,
+                branch_id=branch_id,
                 date_from=week_start,
                 date_to=week_end,
             ),
             "this_month": AnalyticsRepository.count_leads(
                 db,
                 employee_id=employee_id,
+                state_id=state_id,
+                branch_id=branch_id,
                 date_from=month_start,
                 date_to=month_end,
             ),
@@ -107,6 +125,8 @@ class AnalyticsRepository:
             result["custom"] = AnalyticsRepository.count_leads(
                 db,
                 employee_id=employee_id,
+                state_id=state_id,
+                branch_id=branch_id,
                 date_from=custom_from,
                 date_to=custom_to,
             )
@@ -129,6 +149,8 @@ class AnalyticsRepository:
     def payment_status_summary(
         db: Session,
         employee_id: Optional[int] = None,
+        state_id: Optional[int] = None,
+        branch_id: Optional[int] = None,
         date_from: Optional[date] = None,
         date_to: Optional[date] = None,
     ) -> dict:
@@ -151,6 +173,9 @@ class AnalyticsRepository:
 
         if employee_id is not None:
             base = base.filter(Prospect.assigned_to_id == employee_id)
+        base = apply_prospect_assignee_geo(
+            base, state_id=state_id, branch_id=branch_id
+        )
 
         start_dt, end_dt = datetime_range_bounds(date_from, date_to)
         if start_dt:
@@ -191,6 +216,8 @@ class AnalyticsRepository:
     def conversion_rate(
         db: Session,
         employee_id: Optional[int] = None,
+        state_id: Optional[int] = None,
+        branch_id: Optional[int] = None,
         date_from: Optional[date] = None,
         date_to: Optional[date] = None,
     ) -> float:
@@ -198,6 +225,8 @@ class AnalyticsRepository:
         total = AnalyticsRepository.count_leads(
             db,
             employee_id=employee_id,
+            state_id=state_id,
+            branch_id=branch_id,
             date_from=date_from,
             date_to=date_to,
         )
@@ -212,6 +241,9 @@ class AnalyticsRepository:
         )
         if employee_id is not None:
             query = query.filter(Prospect.assigned_to_id == employee_id)
+        query = apply_prospect_assignee_geo(
+            query, state_id=state_id, branch_id=branch_id
+        )
 
         start_dt, end_dt = datetime_range_bounds(date_from, date_to)
         if start_dt:
@@ -226,6 +258,8 @@ class AnalyticsRepository:
     def payment_collected(
         db: Session,
         employee_id: Optional[int] = None,
+        state_id: Optional[int] = None,
+        branch_id: Optional[int] = None,
         date_from: Optional[date] = None,
         date_to: Optional[date] = None,
     ) -> Decimal:
@@ -237,6 +271,9 @@ class AnalyticsRepository:
 
         if employee_id is not None:
             query = query.filter(Prospect.assigned_to_id == employee_id)
+        query = apply_prospect_assignee_geo(
+            query, state_id=state_id, branch_id=branch_id
+        )
 
         if date_from:
             query = query.filter(Payment.payment_date >= date_from)
@@ -249,6 +286,8 @@ class AnalyticsRepository:
     def payment_collected_summary(
         db: Session,
         employee_id: Optional[int] = None,
+        state_id: Optional[int] = None,
+        branch_id: Optional[int] = None,
         custom_from: Optional[date] = None,
         custom_to: Optional[date] = None,
     ) -> dict:
@@ -278,6 +317,8 @@ class AnalyticsRepository:
             return AnalyticsRepository.payment_collected(
                 db,
                 employee_id=employee_id,
+                state_id=state_id,
+                branch_id=branch_id,
                 date_from=start,
                 date_to=end,
             )
@@ -290,13 +331,18 @@ class AnalyticsRepository:
             total_sum = AnalyticsRepository.payment_collected(
                 db,
                 employee_id=employee_id,
+                state_id=state_id,
+                branch_id=branch_id,
                 date_from=filter_from,
                 date_to=filter_to,
             )
             custom_sum = total_sum
         else:
             total_sum = AnalyticsRepository.payment_collected(
-                db, employee_id=employee_id
+                db,
+                employee_id=employee_id,
+                state_id=state_id,
+                branch_id=branch_id,
             )
             custom_sum = None
 
@@ -313,6 +359,8 @@ class AnalyticsRepository:
         db: Session,
         date_from: Optional[date] = None,
         date_to: Optional[date] = None,
+        state_id: Optional[int] = None,
+        branch_id: Optional[int] = None,
     ) -> int:
         """Active sales staff: employee + manager + sales_head."""
         from app.core.roles import SALES_ROLES
@@ -320,6 +368,9 @@ class AnalyticsRepository:
         query = db.query(func.count(User.id)).filter(
             User.role.in_(tuple(SALES_ROLES)),
             User.is_active.is_(True),
+        )
+        query = apply_user_geo_filter(
+            query, state_id=state_id, branch_id=branch_id
         )
         start_dt, end_dt = datetime_range_bounds(date_from, date_to)
         if start_dt:
@@ -333,6 +384,8 @@ class AnalyticsRepository:
         db: Session,
         date_from: Optional[date] = None,
         date_to: Optional[date] = None,
+        state_id: Optional[int] = None,
+        branch_id: Optional[int] = None,
     ) -> int:
         """Active non-admin users (staff roles)."""
         from app.core.roles import ASSIGNABLE_ROLES
@@ -340,6 +393,9 @@ class AnalyticsRepository:
         query = db.query(func.count(User.id)).filter(
             User.role.in_(tuple(ASSIGNABLE_ROLES)),
             User.is_active.is_(True),
+        )
+        query = apply_user_geo_filter(
+            query, state_id=state_id, branch_id=branch_id
         )
         start_dt, end_dt = datetime_range_bounds(date_from, date_to)
         if start_dt:
@@ -352,6 +408,8 @@ class AnalyticsRepository:
     def leads_by_stage(
         db: Session,
         employee_id: Optional[int] = None,
+        state_id: Optional[int] = None,
+        branch_id: Optional[int] = None,
         date_from: Optional[date] = None,
         date_to: Optional[date] = None,
         source: Optional[str] = None,
@@ -360,6 +418,9 @@ class AnalyticsRepository:
 
         if employee_id is not None:
             query = query.filter(Prospect.assigned_to_id == employee_id)
+        query = apply_prospect_assignee_geo(
+            query, state_id=state_id, branch_id=branch_id
+        )
         if source:
             query = query.filter(Prospect.source == source)
 
@@ -376,6 +437,8 @@ class AnalyticsRepository:
     def leads_by_admission_stage(
         db: Session,
         employee_id: Optional[int] = None,
+        state_id: Optional[int] = None,
+        branch_id: Optional[int] = None,
         date_from: Optional[date] = None,
         date_to: Optional[date] = None,
         source: Optional[str] = None,
@@ -384,6 +447,9 @@ class AnalyticsRepository:
 
         if employee_id is not None:
             query = query.filter(Prospect.assigned_to_id == employee_id)
+        query = apply_prospect_assignee_geo(
+            query, state_id=state_id, branch_id=branch_id
+        )
         if source:
             query = query.filter(Prospect.source == source)
 
@@ -402,6 +468,8 @@ class AnalyticsRepository:
         date_from: Optional[date] = None,
         date_to: Optional[date] = None,
         employee_id: Optional[int] = None,
+        state_id: Optional[int] = None,
+        branch_id: Optional[int] = None,
         stage: Optional[str] = None,
         source: Optional[str] = None,
         limit: Optional[int] = None,
@@ -477,6 +545,9 @@ class AnalyticsRepository:
 
         if employee_id is not None:
             query = query.filter(User.id == employee_id)
+        query = apply_user_geo_filter(
+            query, state_id=state_id, branch_id=branch_id
+        )
 
         query = query.group_by(
             User.id,
@@ -513,6 +584,8 @@ class AnalyticsRepository:
     def monthly_sales(
         db: Session,
         employee_id: Optional[int] = None,
+        state_id: Optional[int] = None,
+        branch_id: Optional[int] = None,
         date_from: Optional[date] = None,
         date_to: Optional[date] = None,
         months: int = 12,
@@ -533,6 +606,9 @@ class AnalyticsRepository:
 
         if employee_id is not None:
             query = query.filter(Prospect.assigned_to_id == employee_id)
+        query = apply_prospect_assignee_geo(
+            query, state_id=state_id, branch_id=branch_id
+        )
         if date_from:
             query = query.filter(Payment.payment_date >= date_from)
         if date_to:
@@ -568,6 +644,8 @@ class AnalyticsRepository:
     def lead_source_analysis(
         db: Session,
         employee_id: Optional[int] = None,
+        state_id: Optional[int] = None,
+        branch_id: Optional[int] = None,
         date_from: Optional[date] = None,
         date_to: Optional[date] = None,
         stage: Optional[str] = None,
@@ -591,6 +669,9 @@ class AnalyticsRepository:
 
         if employee_id is not None:
             query = query.filter(Prospect.assigned_to_id == employee_id)
+        query = apply_prospect_assignee_geo(
+            query, state_id=state_id, branch_id=branch_id
+        )
         if stage:
             query = query.filter(Prospect.stage == stage)
         if start_dt:
@@ -614,6 +695,8 @@ class AnalyticsRepository:
     def win_loss_analysis(
         db: Session,
         employee_id: Optional[int] = None,
+        state_id: Optional[int] = None,
+        branch_id: Optional[int] = None,
         date_from: Optional[date] = None,
         date_to: Optional[date] = None,
         source: Optional[str] = None,
@@ -621,6 +704,8 @@ class AnalyticsRepository:
         query = AnalyticsRepository._prospect_base_query(
             db,
             employee_id=employee_id,
+            state_id=state_id,
+            branch_id=branch_id,
             source=source,
             date_from=date_from,
             date_to=date_to,
@@ -641,6 +726,8 @@ class AnalyticsRepository:
     def follow_up_activity_count(
         db: Session,
         employee_id: Optional[int] = None,
+        state_id: Optional[int] = None,
+        branch_id: Optional[int] = None,
         date_from: Optional[date] = None,
         date_to: Optional[date] = None,
     ) -> int:
@@ -663,6 +750,9 @@ class AnalyticsRepository:
         if employee_id is not None:
             prospect_q = prospect_q.filter(Prospect.assigned_to_id == employee_id)
             query = query.filter(ActivityLog.user_id == employee_id)
+        prospect_q = apply_prospect_assignee_geo(
+            prospect_q, state_id=state_id, branch_id=branch_id
+        )
 
         start_dt, end_dt = datetime_range_bounds(date_from, date_to)
         if start_dt:
@@ -680,12 +770,17 @@ class AnalyticsRepository:
     def exam_stats(
         db: Session,
         employee_id: Optional[int] = None,
+        state_id: Optional[int] = None,
+        branch_id: Optional[int] = None,
         date_from: Optional[date] = None,
         date_to: Optional[date] = None,
     ) -> dict:
         query = db.query(Prospect)
         if employee_id is not None:
             query = query.filter(Prospect.assigned_to_id == employee_id)
+        query = apply_prospect_assignee_geo(
+            query, state_id=state_id, branch_id=branch_id
+        )
 
         start_dt, end_dt = datetime_range_bounds(date_from, date_to)
         if start_dt:
@@ -701,6 +796,8 @@ class AnalyticsRepository:
     def sales_target_summary(
         db: Session,
         employee_id: Optional[int] = None,
+        state_id: Optional[int] = None,
+        branch_id: Optional[int] = None,
         achieved: Optional[Decimal] = None,
     ) -> dict:
         from calendar import monthrange
@@ -718,11 +815,13 @@ class AnalyticsRepository:
                 resolve_employee_monthly_target(db, user)
             )
         else:
-            employees = (
-                db.query(User)
-                .filter(User.role == UserRole.employee, User.is_active.is_(True))
-                .all()
+            employees_q = db.query(User).filter(
+                User.role == UserRole.employee, User.is_active.is_(True)
             )
+            employees_q = apply_user_geo_filter(
+                employees_q, state_id=state_id, branch_id=branch_id
+            )
+            employees = employees_q.all()
             if employees:
                 target = Decimal("0")
                 any_assigned = False
@@ -745,6 +844,8 @@ class AnalyticsRepository:
                     AnalyticsRepository.count_leads(
                         db,
                         employee_id=employee_id,
+                        state_id=state_id,
+                        branch_id=branch_id,
                         date_from=start_of_month(current),
                         date_to=end_of_month(current),
                     )
@@ -775,6 +876,8 @@ class AnalyticsRepository:
     def list_active_employees(
         db: Session,
         employee_id: Optional[int] = None,
+        state_id: Optional[int] = None,
+        branch_id: Optional[int] = None,
     ):
         from app.db.models.user import User, UserRole
 
@@ -784,12 +887,17 @@ class AnalyticsRepository:
         )
         if employee_id is not None:
             query = query.filter(User.id == employee_id)
+        query = apply_user_geo_filter(
+            query, state_id=state_id, branch_id=branch_id
+        )
         return query.order_by(User.name.asc()).all()
 
     @staticmethod
     def incentive_status(
         db: Session,
         employee_id: Optional[int] = None,
+        state_id: Optional[int] = None,
+        branch_id: Optional[int] = None,
         lead_count: Optional[int] = None,
         date_from: Optional[date] = None,
         date_to: Optional[date] = None,
@@ -807,6 +915,8 @@ class AnalyticsRepository:
             lead_count = AnalyticsRepository.count_leads(
                 db,
                 employee_id=employee_id,
+                state_id=state_id,
+                branch_id=branch_id,
                 date_from=date_from or start_of_month(current),
                 date_to=date_to or end_of_month(current),
             )
@@ -879,6 +989,8 @@ class AnalyticsRepository:
     def list_leads_for_export(
         db: Session,
         employee_id: Optional[int] = None,
+        state_id: Optional[int] = None,
+        branch_id: Optional[int] = None,
         date_from: Optional[date] = None,
         date_to: Optional[date] = None,
         stage: Optional[str] = None,
@@ -888,6 +1000,8 @@ class AnalyticsRepository:
             AnalyticsRepository._prospect_base_query(
                 db,
                 employee_id=employee_id,
+                state_id=state_id,
+                branch_id=branch_id,
                 stage=stage,
                 source=source,
                 date_from=date_from,

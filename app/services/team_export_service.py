@@ -27,6 +27,8 @@ class TeamExportService:
         date_to: Optional[date] = None,
         employee_id: Optional[int] = None,
         supervisor_id: Optional[int] = None,
+        state_id: Optional[int] = None,
+        branch_id: Optional[int] = None,
     ) -> StreamingResponse:
         export_type = export_type.lower().strip()
         fmt = fmt.lower().strip()
@@ -50,6 +52,8 @@ class TeamExportService:
             date_to=date_to,
             employee_id=employee_id,
             supervisor_id=supervisor_id,
+            state_id=state_id,
+            branch_id=branch_id,
         )
         filename = f"team_{export_type}_export.{fmt}"
         if fmt == "csv":
@@ -66,6 +70,8 @@ class TeamExportService:
         date_to: Optional[date],
         employee_id: Optional[int],
         supervisor_id: Optional[int],
+        state_id: Optional[int] = None,
+        branch_id: Optional[int] = None,
     ) -> tuple[list[str], list[list[Any]], str]:
         if export_type == "performance":
             data = TeamService.performance(
@@ -75,6 +81,8 @@ class TeamExportService:
                 date_to=date_to,
                 employee_id=employee_id,
                 supervisor_id=supervisor_id,
+                state_id=state_id,
+                branch_id=branch_id,
             )
             headers = [
                 "Employee ID",
@@ -115,6 +123,8 @@ class TeamExportService:
                 date_to=date_to,
                 employee_id=employee_id,
                 supervisor_id=supervisor_id,
+                state_id=state_id,
+                branch_id=branch_id,
             )
             headers = ["Metric", "Value"]
             rows = [
@@ -141,6 +151,8 @@ class TeamExportService:
                 date_to=date_to,
                 employee_id=employee_id,
                 supervisor_id=supervisor_id,
+                state_id=state_id,
+                branch_id=branch_id,
             )
             headers = ["Metric", "Value"]
             c = data["collected"]
@@ -173,6 +185,8 @@ class TeamExportService:
             date_to=date_to,
             employee_id=employee_id,
             supervisor_id=supervisor_id,
+            state_id=state_id,
+            branch_id=branch_id,
         )
         headers = ["Metric", "Value"]
         rows = [
