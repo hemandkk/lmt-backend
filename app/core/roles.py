@@ -276,7 +276,9 @@ def prospect_visible_to_user(prospect, user: User) -> bool:
     if is_sales_user(user):
         return prospect.assigned_to_id == user.id
     if can_view_all_leads(user):
-        return True
+        from app.core.geo_scope import assignee_in_geo_scope
+
+        return assignee_in_geo_scope(prospect, user)
 
     return False
 

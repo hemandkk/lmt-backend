@@ -38,7 +38,11 @@ class TeamService:
         Admin: all active users (employees, managers, sales_heads).
         Manager/sales_head: only employees who report to them.
         """
-        from app.core.geo_scope import apply_user_geo_filter
+        from app.core.geo_scope import apply_user_geo_filter, merge_geo_query_params
+
+        state_id, branch_id = merge_geo_query_params(
+            viewer, state_id, branch_id
+        )
 
         query = db.query(User.id).filter(
             User.role.in_([UserRole.employee, UserRole.manager, UserRole.sales_head]),

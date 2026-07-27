@@ -451,6 +451,12 @@ def list_prospects(
     ):
         assigned_to_id = None
 
+    from app.core.geo_scope import merge_geo_query_params
+
+    state_id, branch_id = merge_geo_query_params(
+        current_user, state_id, branch_id
+    )
+
     try:
         stage_filter = _parse_admission_stage_filters(
             admission_stage, admission_stages, current_user
@@ -511,6 +517,12 @@ def export_prospects(
         UserRole.processing_team,
     ):
         assigned_to_id = None
+
+    from app.core.geo_scope import merge_geo_query_params
+
+    state_id, branch_id = merge_geo_query_params(
+        current_user, state_id, branch_id
+    )
 
     try:
         stage_filter = _parse_admission_stage_filters(

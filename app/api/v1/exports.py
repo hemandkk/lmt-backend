@@ -40,12 +40,18 @@ def export_data(
     - Employee: always scoped to self
     - Admin: all, or filter with employeeId
     """
-    is_admin = current_user.role == UserRole.admin
+    is_admin_user = current_user.role == UserRole.admin
     scoped_employee_id = resolve_employee_scope(current_user, employee_id)
+
+    from app.core.geo_scope import merge_geo_query_params
+
+    state_id, branch_id = merge_geo_query_params(
+        current_user, state_id, branch_id
+    )
 
     # Admin "all" exports keep employee_id=None; employees always get self
     export_employee_id = scoped_employee_id
-    if is_admin and employee_id is None:
+    if is_admin_user and employee_id is None:
         export_employee_id = None
 
     try:
@@ -61,7 +67,7 @@ def export_data(
             stage=stage,
             source=source,
             current_user_id=current_user.id,
-            is_admin=is_admin and employee_id is None,
+            is_admin=is_admin_user and employee_id is None,
         )
     except ValueError as ex:
         raise HTTPException(status_code=400, detail=str(ex))

@@ -91,6 +91,12 @@ def list_employees(
                 detail="status must be active, inactive, or all.",
             )
 
+    from app.core.geo_scope import merge_geo_query_params
+
+    state_id, branch_id = merge_geo_query_params(
+        current_user, state_id, branch_id
+    )
+
     return EmployeeService.list(
         db,
         page=page,

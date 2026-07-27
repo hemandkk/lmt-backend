@@ -142,9 +142,13 @@ def list_payments(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
+    from app.core.geo_scope import merge_geo_query_params
     from app.core.roles import visible_admission_stages_for_role
 
     scoped_employee_id = resolve_employee_scope(current_user, employee_id)
+    state_id, branch_id = merge_geo_query_params(
+        current_user, state_id, branch_id
+    )
     forced = visible_admission_stages_for_role(current_user)
     admission_stages = (
         [s.value for s in forced] if forced is not None else None
@@ -178,7 +182,12 @@ def payments_summary(
     """
     Payment KPIs. Declared before /{payment_id} so 'summary' is not treated as an id.
     """
+    from app.core.geo_scope import merge_geo_query_params
+
     scoped_employee_id = resolve_employee_scope(current_user, employee_id)
+    state_id, branch_id = merge_geo_query_params(
+        current_user, state_id, branch_id
+    )
     if prospect_id is not None:
         ensure_prospect_access(db, prospect_id, current_user)
 

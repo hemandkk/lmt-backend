@@ -239,13 +239,18 @@ def incentives_report(
     - Admin: all employees, or ?employeeId= / stateId / branchId
     """
     scoped_employee_id = resolve_employee_scope(current_user, employee_id)
+    from app.core.geo_scope import merge_geo_query_params
+
+    state_id, branch_id = merge_geo_query_params(
+        current_user, state_id, branch_id
+    )
     try:
         return ReportService.incentive_report(
             db,
             month=month,
             employee_id=scoped_employee_id,
-            state_id=state_id if current_user.role == UserRole.admin else None,
-            branch_id=branch_id if current_user.role == UserRole.admin else None,
+            state_id=state_id,
+            branch_id=branch_id,
         )
     except ValueError as ex:
         raise HTTPException(status_code=400, detail=str(ex)) from ex
@@ -275,11 +280,16 @@ def incentive_releases_report(
     - Admin without ?employeeId=: per-employee breakdown for all employees
     """
     scoped_employee_id = resolve_employee_scope(current_user, employee_id)
+    from app.core.geo_scope import merge_geo_query_params
+
+    state_id, branch_id = merge_geo_query_params(current_user)
     try:
         return IncentiveReleaseService.incentive_release_report(
             db,
             month=month,
             employee_id=scoped_employee_id,
+            state_id=state_id,
+            branch_id=branch_id,
         )
     except ValueError as ex:
         raise HTTPException(status_code=400, detail=str(ex)) from ex

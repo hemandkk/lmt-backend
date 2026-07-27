@@ -173,6 +173,8 @@ class IncentiveReleaseService:
         db: Session,
         month: Optional[str] = None,
         employee_id: Optional[int] = None,
+        state_id: Optional[int] = None,
+        branch_id: Optional[int] = None,
     ) -> IncentiveReleaseResponse | IncentiveReleaseListResponse:
         """
         Monthly incentive release summary.
@@ -213,8 +215,10 @@ class IncentiveReleaseService:
             result.employee_name = user.name if user else None
             return result
 
-        # Admin: all employees view
-        employees = AnalyticsRepository.list_active_employees(db)
+        # All employees in geo scope (admin may pass None,None for nationwide)
+        employees = AnalyticsRepository.list_active_employees(
+            db, state_id=state_id, branch_id=branch_id
+        )
         if not employees:
             return IncentiveReleaseListResponse(
                 month=report_label,
