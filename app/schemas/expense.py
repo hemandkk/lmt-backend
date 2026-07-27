@@ -6,7 +6,7 @@ from typing import Optional
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.db.models.expense import ExpenseType
+from app.db.models.payment_request import ExpenseCategory
 
 
 def _alias_config() -> ConfigDict:
@@ -33,8 +33,8 @@ class ExpenseBase(BaseModel):
         max_length=100,
         alias="installmentNumber",
     )
-    expense_type: ExpenseType = Field(
-        default=ExpenseType.office,
+    expense_type: ExpenseCategory = Field(
+        default=ExpenseCategory.rent,
         alias="expenseType",
     )
     employee_id: Optional[int] = Field(

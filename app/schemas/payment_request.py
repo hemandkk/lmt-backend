@@ -6,7 +6,7 @@ from typing import Any, Optional
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from app.db.models.payment_request import PaymentRequestStatus, PaymentRequestType
+from app.db.models.payment_request import PaymentRequestStatus,ExpenseCategory
 
 
 def _alias_config() -> ConfigDict:
@@ -32,8 +32,8 @@ class PaymentRequestCreate(BaseModel):
         max_length=100,
         alias="installmentNumber",
     )
-    payment_type: PaymentRequestType = Field(
-        default=PaymentRequestType.office,
+    payment_type: ExpenseCategory = Field(
+        default=ExpenseCategory.rent,
         alias="paymentType",
     )
     employee_id: Optional[int] = Field(
@@ -93,8 +93,8 @@ class PaymentRequestResponse(BaseModel):
         alias="installmentNumber",
         serialization_alias="installmentNumber",
     )
-    payment_type: PaymentRequestType = Field(
-        default=PaymentRequestType.office,
+    payment_type: ExpenseCategory = Field(
+        default=ExpenseCategory.rent,
         alias="paymentType",
         serialization_alias="paymentType",
     )

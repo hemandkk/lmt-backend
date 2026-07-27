@@ -7,7 +7,9 @@ from sqlalchemy.orm import Session
 
 from app.core.file_storage import FileStorage
 from app.core.id_generator import generate_id
-from app.db.models.payment_request import PaymentRequest, PaymentRequestStatus, PaymentRequestType
+from app.db.models.payment_request import PaymentRequest, PaymentRequestStatus, ExpenseCategory
+from app.core.constants import EMPLOYEE_PAYMENT_TYPES
+
 from app.repositories.payment_request_repository import PaymentRequestRepository
 from app.schemas.expense import ExpenseCreate
 from app.schemas.payment_request import (
@@ -71,8 +73,10 @@ class PaymentRequestService:
         payload: PaymentRequestCreate,
         actor_id: int | None = None,
     ) -> PaymentRequestResponse:
-        if payload.payment_type == PaymentRequestType.incentive and not payload.employee_id:
-            raise ValueError("employeeId is required when paymentType is 'incentive'.")
+        
+        
+        if payload.payment_type in EMPLOYEE_PAYMENT_TYPES and not payload.employee_id:
+            raise ValueError("employeeId is required for employee-related payment types.")
 
         code = generate_id(self.db, PaymentRequest, "request_id", "PRQ")
         row = PaymentRequest(

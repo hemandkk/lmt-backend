@@ -5,7 +5,9 @@ from sqlalchemy.orm import Session
 
 from app.core.file_storage import FileStorage
 from app.core.id_generator import generate_id
-from app.db.models.expense import Expense, ExpenseType
+from app.db.models.expense import Expense
+from app.db.models.payment_request import ExpenseCategory
+
 from app.repositories.expense_repository import ExpenseRepository
 from app.schemas.expense import ExpenseCreate, ExpenseResponse, ExpenseUpdate
 
@@ -113,7 +115,7 @@ class ExpenseService:
         date_from=None,
         date_to=None,
         search: str | None = None,
-        expense_type: ExpenseType | None = None,
+        expense_type: ExpenseCategory | None = None,
         employee_id: int | None = None,
     ) -> dict:
         """All accountants and admins see every expense (no user scope)."""

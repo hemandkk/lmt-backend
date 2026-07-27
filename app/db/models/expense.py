@@ -9,7 +9,7 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
 from app.db.mixins import TimestampMixin
-
+from app.db.models.payment_request import ExpenseCategory
 
 class ExpenseType(str, enum.Enum):
     office = "office"
@@ -43,14 +43,14 @@ class Expense(TimestampMixin, Base):
         nullable=True,
     )
 
-    expense_type: Mapped[ExpenseType] = mapped_column(
+    expense_type: Mapped[ExpenseCategory] = mapped_column(
         Enum(
-            ExpenseType,
+            ExpenseCategory,
             values_callable=lambda obj: [e.value for e in obj],
             native_enum=False,
             length=20,
         ),
-        default=ExpenseType.office,
+        default=ExpenseCategory.rent,
         nullable=False,
         index=True,
     )

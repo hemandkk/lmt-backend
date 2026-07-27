@@ -5,7 +5,8 @@ from typing import Optional
 
 from sqlalchemy.orm import Session, joinedload
 
-from app.db.models.expense import Expense, ExpenseType
+from app.db.models.expense import Expense
+from app.db.models.payment_request import ExpenseCategory
 
 
 class ExpenseRepository:
@@ -54,7 +55,7 @@ class ExpenseRepository:
         date_from: date | None = None,
         date_to: date | None = None,
         search: str | None = None,
-        expense_type: Optional[ExpenseType] = None,
+        expense_type: Optional[ExpenseCategory] = None,
         employee_id: int | None = None,
     ) -> tuple[int, list[Expense]]:
         query = self.db.query(Expense).options(

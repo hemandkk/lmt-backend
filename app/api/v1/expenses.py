@@ -16,7 +16,8 @@ from fastapi import (
 from pydantic import ValidationError
 from sqlalchemy.orm import Session
 
-from app.db.models.expense import ExpenseType
+from app.db.models.payment_request import ExpenseCategory
+
 from app.db.models.user import User
 from app.db.session import get_db
 from app.dependencies.permissions import (
@@ -30,14 +31,14 @@ from app.schemas.expense import (
     ExpenseUpdate,
 )
 from app.services.expense_service import ExpenseService
+from app.core.constants import EMPLOYEE_PAYMENT_TYPES
 
-
-def _parse_expense_type(raw: str | None) -> ExpenseType | None:
+def _parse_expense_type(raw: str | None) -> ExpenseCategory | None:
     if not raw:
         return None
     value = raw.strip().lower()
     try:
-        return ExpenseType(value)
+        return ExpenseCategory(value)
     except ValueError:
         return None
 
@@ -117,10 +118,11 @@ async def create_expense(
             detail=exc.errors(),
         ) from exc
 
-    if payload.expense_type == ExpenseType.incentive and not payload.employee_id:
+            
+    if payload.expense_type in EMPLOYEE_PAYMENT_TYPES and not payload.employee_id:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="employeeId is required when expenseType is incentive.",
+            detail="employeeId is required for employee-related payment type.",
         )
 
     return ExpenseService(db).create(
@@ -141,7 +143,7 @@ def list_expenses(
     expense_type: str | None = Query(
         None,
         alias="expenseType",
-        description="office | incentive",
+        description="ExpenseCategory items",
     ),
     employee_id: int | None = Query(
         None,

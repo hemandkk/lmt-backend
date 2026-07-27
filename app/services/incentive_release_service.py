@@ -7,7 +7,9 @@ from sqlalchemy import extract, func
 from sqlalchemy.orm import Session
 
 from app.core.date_utils import today
-from app.db.models.expense import Expense, ExpenseType
+from app.db.models.expense import Expense
+from app.db.models.payment_request import ExpenseCategory
+
 from app.db.models.prospect import AdmissionStage, Prospect
 from app.db.models.user import User, UserRole
 from app.repositories.analytics_repository import AnalyticsRepository
@@ -82,7 +84,7 @@ def _compute_employee_monthly(
             db.query(func.coalesce(func.sum(Expense.amount), 0))
             .filter(
                 Expense.employee_id == employee_id,
-                Expense.expense_type == ExpenseType.incentive,
+                Expense.expense_type == ExpenseCategory.incentive,
             )
             .scalar() or 0
         )

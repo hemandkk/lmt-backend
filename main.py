@@ -308,7 +308,7 @@ def ensure_schema_updates() -> None:
             if "payment_type" not in pr_cols:
                 conn.execute(text(
                     "ALTER TABLE payment_requests "
-                    "ADD COLUMN payment_type VARCHAR(20) NOT NULL DEFAULT 'office'"
+                    "ADD COLUMN payment_type VARCHAR(20) NOT NULL DEFAULT 'rent'"
                 ))
                 conn.execute(text(
                     "CREATE INDEX IF NOT EXISTS ix_payment_requests_payment_type "
@@ -329,7 +329,7 @@ def ensure_schema_updates() -> None:
             if "expense_type" not in exp_cols:
                 conn.execute(text(
                     "ALTER TABLE expenses "
-                    "ADD COLUMN expense_type VARCHAR(20) NOT NULL DEFAULT 'office'"
+                    "ADD COLUMN expense_type VARCHAR(20) NOT NULL DEFAULT 'rent'"
                 ))
                 conn.execute(text(
                     "CREATE INDEX IF NOT EXISTS ix_expenses_expense_type "

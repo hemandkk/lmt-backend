@@ -21,6 +21,22 @@ class PaymentRequestType(str, enum.Enum):
     office = "office"
     incentive = "incentive"
 
+class ExpenseCategory(str, enum.Enum):
+    salary = "salary"
+    incentive = "incentive"
+    rent = "rent"
+    electricity = "electricity"
+    water = "water"
+    celebration = "celebration"
+    crm = "crm"
+    software = "software"
+    get_lead = "get_lead"
+    bonvoice = "bonvoice"
+    sim_recharge = "sim_recharge"
+    marketing_management = "marketing_management"
+    lead_gen_marketing = "lead_gen_marketing"
+    gadget_purchase = "gadget_purchase"
+    others = "others"
 
 class PaymentRequest(TimestampMixin, Base):
     __tablename__ = "payment_requests"
@@ -49,14 +65,14 @@ class PaymentRequest(TimestampMixin, Base):
         nullable=True,
     )
 
-    payment_type: Mapped[PaymentRequestType] = mapped_column(
+    payment_type: Mapped[ExpenseCategory] = mapped_column(
         Enum(
-            PaymentRequestType,
+            ExpenseCategory,
             values_callable=lambda obj: [e.value for e in obj],
             native_enum=False,
             length=20,
         ),
-        default=PaymentRequestType.office,
+        default=ExpenseCategory.rent,
         nullable=False,
         index=True,
     )
