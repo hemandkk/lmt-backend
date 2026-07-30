@@ -60,7 +60,9 @@ def list_team_members(
 ):
     """
     Team employee list for filter dropdowns.
-    Manager/sales_head: own team. Admin: all or filter by supervisorId.
+    Manager: own reporting team.
+    Sales head: employees and managers in assigned branches (branchIds may narrow).
+    Admin: all or filter by supervisorId.
     """
     try:
         return TeamService.list_members(
@@ -128,7 +130,7 @@ def team_overview(
     """
     Team overview KPIs.
     Admin: all employees, or filter with employeeId and/or supervisorId.
-    Manager/sales_head: own team (optionally narrowed with employeeId).
+    Manager: reporting team. Sales head: employees and managers in assigned branches.
     """
     try:
         return TeamService.overview(

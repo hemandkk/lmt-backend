@@ -303,6 +303,7 @@ def incentive_releases_report(
             employee_id=scoped_employee_id,
             state_id=state_id,
             branch_id=branch_id,
+            branch_ids=branch_ids,
         )
     except ValueError as ex:
         raise HTTPException(status_code=400, detail=str(ex)) from ex

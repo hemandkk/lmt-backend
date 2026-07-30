@@ -441,6 +441,7 @@ class ExportService:
                 employee_id=employee_id,
                 state_id=state_id,
                 branch_id=branch_id,
+                branch_ids=branch_ids,
                 stage=stage,
                 source=source,
             )

@@ -37,7 +37,8 @@ class TeamService:
         """
         Resolve which users are in scope for the viewer.
         Admin: all active users (employees, managers, sales_heads).
-        Manager/sales_head: only employees who report to them.
+        Manager: employees who report to them.
+        Sales head: employees and managers in their assigned branch(es).
         """
         from app.core.geo_scope import apply_user_geo_filter, merge_geo_query_params
 
@@ -78,9 +79,9 @@ class TeamService:
                 User.reports_to_manager_id == viewer.id,
             )
         elif is_sales_head(viewer):
+            # Managers sit under sales head; both are visible by assigned branches.
             query = query.filter(
-                User.role == UserRole.employee,
-                User.reports_to_sales_head_id == viewer.id,
+                User.role.in_([UserRole.employee, UserRole.manager])
             )
         else:
             raise ValueError("Access denied.")

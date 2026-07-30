@@ -483,6 +483,7 @@ class AnalyticsRepository:
         employee_id: Optional[int] = None,
         state_id: Optional[int] = None,
         branch_id: Optional[int] = None,
+        branch_ids: Optional[list[int]] = None,
         stage: Optional[str] = None,
         source: Optional[str] = None,
         limit: Optional[int] = None,
@@ -559,7 +560,10 @@ class AnalyticsRepository:
         if employee_id is not None:
             query = query.filter(User.id == employee_id)
         query = apply_user_geo_filter(
-            query, state_id=state_id, branch_id=branch_id
+            query,
+            state_id=state_id,
+            branch_id=branch_id,
+            branch_ids=branch_ids,
         )
 
         query = query.group_by(

@@ -123,9 +123,28 @@ def get_employee(
     current_user: User = Depends(require_admin_or_sales_head),
 ):
     try:
-        return EmployeeService.get(db, employee_id)
+        employee = EmployeeService.get(db, employee_id)
     except ValueError as ex:
         raise HTTPException(status_code=404, detail=str(ex)) from ex
+
+    from app.core.geo_scope import merge_geo_query_params
+    from app.core.roles import is_admin
+
+    if not is_admin(current_user):
+        geo = merge_geo_query_params(current_user)
+        if geo.is_empty:
+            raise HTTPException(status_code=403, detail="Employee is outside your scope.")
+        allowed_branches = geo.normalized_branch_ids()
+        emp_state = getattr(employee, "state_id", None)
+        emp_branch = getattr(employee, "branch_id", None)
+        if geo.state_id is not None and emp_state != geo.state_id:
+            raise HTTPException(status_code=403, detail="Employee is outside your scope.")
+        if allowed_branches and emp_branch not in allowed_branches:
+            raise HTTPException(status_code=403, detail="Employee is outside your scope.")
+        if geo.branch_id is not None and emp_branch != geo.branch_id:
+            raise HTTPException(status_code=403, detail="Employee is outside your scope.")
+
+    return employee
 
 
 @router.post(

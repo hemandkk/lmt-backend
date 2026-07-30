@@ -179,12 +179,13 @@ class IncentiveReleaseService:
         employee_id: Optional[int] = None,
         state_id: Optional[int] = None,
         branch_id: Optional[int] = None,
+        branch_ids: Optional[list[int]] = None,
     ) -> IncentiveReleaseResponse | IncentiveReleaseListResponse:
         """
         Monthly incentive release summary.
 
         When employee_id is provided: returns data for that single employee.
-        When employee_id is None (admin): returns per-employee breakdown.
+        When employee_id is None: returns per-employee breakdown (geo-scoped).
         """
         report_date_from, report_date_to, report_label = _parse_month(month)
         slabs = IncentiveRepository.get_all(db)
@@ -219,9 +220,12 @@ class IncentiveReleaseService:
             result.employee_name = user.name if user else None
             return result
 
-        # All employees in geo scope (admin may pass None,None for nationwide)
+        # All employees in geo scope (admin may pass None for nationwide)
         employees = AnalyticsRepository.list_active_employees(
-            db, state_id=state_id, branch_id=branch_id
+            db,
+            state_id=state_id,
+            branch_id=branch_id,
+            branch_ids=branch_ids,
         )
         if not employees:
             return IncentiveReleaseListResponse(
