@@ -62,6 +62,7 @@ class ExpenseRepository:
         employee_id: int | None = None,
         state_id: int | None = None,
         branch_id: int | None = None,
+        branch_ids: list[int] | None = None,
     ) -> tuple[int, list[Expense]]:
         from app.core.geo_scope import apply_entity_geo_filter
 
@@ -103,6 +104,7 @@ class ExpenseRepository:
             ),
             state_id=state_id,
             branch_id=branch_id,
+            branch_ids=branch_ids,
         )
 
         total = query.count()
@@ -113,6 +115,32 @@ class ExpenseRepository:
             .all()
         )
         return total, items
+
+
+    def list_for_export(
+        self,
+        date_from: date | None = None,
+        date_to: date | None = None,
+        search: str | None = None,
+        expense_type: Optional[ExpenseCategory] = None,
+        employee_id: int | None = None,
+        state_id: int | None = None,
+        branch_id: int | None = None,
+        branch_ids: list[int] | None = None,
+    ) -> list[Expense]:
+        _, items = self.list(
+            skip=0,
+            limit=100_000,
+            date_from=date_from,
+            date_to=date_to,
+            search=search,
+            expense_type=expense_type,
+            employee_id=employee_id,
+            state_id=state_id,
+            branch_id=branch_id,
+            branch_ids=branch_ids,
+        )
+        return items
 
     def update(self, expense: Expense) -> Expense:
         self.db.commit()

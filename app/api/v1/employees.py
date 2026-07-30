@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 
 from app.core.id_generator import generate_next_code
 from app.db.session import get_db
-from app.dependencies.permissions import require_admin, require_admin_or_accountant
+from app.dependencies.permissions import require_admin, require_admin_or_accountant_or_sales_head,require_admin_or_sales_head
 from app.db.models.user import User
 from app.schemas.auth import ResetPasswordRequest
 from app.schemas.employee import (
@@ -72,8 +72,9 @@ def list_employees(
     all_records: bool = Query(False, alias="all"),
     state_id: Optional[int] = Query(None, alias="stateId"),
     branch_id: Optional[int] = Query(None, alias="branchId"),
+    branch_ids: Optional[str] = Query(None, alias="branchIds", description="CSV e.g. 1,2,3"),
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_admin_or_accountant),
+    current_user: User = Depends(require_admin_or_accountant_or_sales_head),
 ):
     """Admin/Accountant: paginated staff directory (all assignable roles)."""
     resolved_active = is_active
@@ -91,11 +92,14 @@ def list_employees(
                 detail="status must be active, inactive, or all.",
             )
 
-    from app.core.geo_scope import merge_geo_query_params
+    from app.core.geo_scope import merge_geo_query_params, parse_branch_ids
 
-    state_id, branch_id = merge_geo_query_params(
-        current_user, state_id, branch_id
+    geo = merge_geo_query_params(
+        current_user, state_id, branch_id, parse_branch_ids(branch_ids)
     )
+    state_id = geo.state_id
+    branch_id = geo.branch_id
+    branch_ids = geo.normalized_branch_ids()
 
     return EmployeeService.list(
         db,
@@ -108,6 +112,7 @@ def list_employees(
         all_records=all_records,
         state_id=state_id,
         branch_id=branch_id,
+        branch_ids=branch_ids,
     )
 
 
@@ -115,7 +120,7 @@ def list_employees(
 def get_employee(
     employee_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(require_admin),
+    current_user: User = Depends(require_admin_or_sales_head),
 ):
     try:
         return EmployeeService.get(db, employee_id)

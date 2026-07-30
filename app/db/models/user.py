@@ -8,6 +8,8 @@ from sqlalchemy import (
     DateTime,
     ForeignKey,
     Numeric,
+    Table,
+    UniqueConstraint,
 )
 from sqlalchemy.orm import relationship
 from app.db.base import Base
@@ -21,6 +23,26 @@ class UserRole(str, enum.Enum):
     processing_team = "processing_team"
     manager = "manager"
     sales_head = "sales_head"
+
+
+# Sales heads may oversee multiple branches within a state.
+user_branches = Table(
+    "user_branches",
+    Base.metadata,
+    Column(
+        "user_id",
+        Integer,
+        ForeignKey("users.id", ondelete="CASCADE"),
+        primary_key=True,
+    ),
+    Column(
+        "branch_id",
+        Integer,
+        ForeignKey("branches.id", ondelete="CASCADE"),
+        primary_key=True,
+    ),
+    UniqueConstraint("user_id", "branch_id", name="uq_user_branches_user_branch"),
+)
 
 
 class User(TimestampMixin, Base):
@@ -92,6 +114,7 @@ class User(TimestampMixin, Base):
         index=True,
     )
 
+    # Primary/home branch (also first of assigned_branches for sales_head)
     branch_id = Column(
         Integer,
         ForeignKey("branches.id", ondelete="RESTRICT"),
@@ -148,4 +171,10 @@ class User(TimestampMixin, Base):
         "Branch",
         back_populates="users",
         foreign_keys=[branch_id],
+    )
+
+    assigned_branches = relationship(
+        "Branch",
+        secondary=user_branches,
+        lazy="selectin",
     )

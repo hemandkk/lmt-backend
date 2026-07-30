@@ -47,6 +47,7 @@ def _user_payload(user: User) -> dict:
         "email": user.email,
         "employee_id": user.employee_id,
         "role": role_value(user),
+        "state_id":user.state_id,
     }
 
 

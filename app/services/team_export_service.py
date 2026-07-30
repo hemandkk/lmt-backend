@@ -29,6 +29,7 @@ class TeamExportService:
         supervisor_id: Optional[int] = None,
         state_id: Optional[int] = None,
         branch_id: Optional[int] = None,
+        branch_ids: Optional[list[int]] = None,
     ) -> StreamingResponse:
         export_type = export_type.lower().strip()
         fmt = fmt.lower().strip()
@@ -54,6 +55,7 @@ class TeamExportService:
             supervisor_id=supervisor_id,
             state_id=state_id,
             branch_id=branch_id,
+            branch_ids=branch_ids,
         )
         filename = f"team_{export_type}_export.{fmt}"
         if fmt == "csv":
@@ -72,6 +74,7 @@ class TeamExportService:
         supervisor_id: Optional[int],
         state_id: Optional[int] = None,
         branch_id: Optional[int] = None,
+        branch_ids: Optional[list[int]] = None,
     ) -> tuple[list[str], list[list[Any]], str]:
         if export_type == "performance":
             data = TeamService.performance(
@@ -83,6 +86,7 @@ class TeamExportService:
                 supervisor_id=supervisor_id,
                 state_id=state_id,
                 branch_id=branch_id,
+                branch_ids=branch_ids,
             )
             headers = [
                 "Employee ID",
@@ -125,6 +129,7 @@ class TeamExportService:
                 supervisor_id=supervisor_id,
                 state_id=state_id,
                 branch_id=branch_id,
+                branch_ids=branch_ids,
             )
             headers = ["Metric", "Value"]
             rows = [
@@ -153,6 +158,7 @@ class TeamExportService:
                 supervisor_id=supervisor_id,
                 state_id=state_id,
                 branch_id=branch_id,
+                branch_ids=branch_ids,
             )
             headers = ["Metric", "Value"]
             c = data["collected"]
@@ -187,6 +193,7 @@ class TeamExportService:
             supervisor_id=supervisor_id,
             state_id=state_id,
             branch_id=branch_id,
+            branch_ids=branch_ids,
         )
         headers = ["Metric", "Value"]
         rows = [

@@ -28,6 +28,7 @@ class AnalyticsRepository:
         employee_id: Optional[int] = None,
         state_id: Optional[int] = None,
         branch_id: Optional[int] = None,
+        branch_ids: Optional[list[int]] = None,
         stage: Optional[str] = None,
         source: Optional[str] = None,
         date_from: Optional[date] = None,
@@ -38,7 +39,10 @@ class AnalyticsRepository:
         if employee_id is not None:
             query = query.filter(Prospect.assigned_to_id == employee_id)
         query = apply_prospect_assignee_geo(
-            query, state_id=state_id, branch_id=branch_id
+            query,
+            state_id=state_id,
+            branch_id=branch_id,
+            branch_ids=branch_ids,
         )
 
         if stage:
@@ -151,6 +155,7 @@ class AnalyticsRepository:
         employee_id: Optional[int] = None,
         state_id: Optional[int] = None,
         branch_id: Optional[int] = None,
+        branch_ids: Optional[list[int]] = None,
         date_from: Optional[date] = None,
         date_to: Optional[date] = None,
     ) -> dict:
@@ -174,7 +179,7 @@ class AnalyticsRepository:
         if employee_id is not None:
             base = base.filter(Prospect.assigned_to_id == employee_id)
         base = apply_prospect_assignee_geo(
-            base, state_id=state_id, branch_id=branch_id
+            base, state_id=state_id, branch_id=branch_id, branch_ids=branch_ids
         )
 
         start_dt, end_dt = datetime_range_bounds(date_from, date_to)
@@ -260,6 +265,7 @@ class AnalyticsRepository:
         employee_id: Optional[int] = None,
         state_id: Optional[int] = None,
         branch_id: Optional[int] = None,
+        branch_ids: Optional[list[int]] = None,
         date_from: Optional[date] = None,
         date_to: Optional[date] = None,
     ) -> Decimal:
@@ -272,7 +278,10 @@ class AnalyticsRepository:
         if employee_id is not None:
             query = query.filter(Prospect.assigned_to_id == employee_id)
         query = apply_prospect_assignee_geo(
-            query, state_id=state_id, branch_id=branch_id
+            query,
+            state_id=state_id,
+            branch_id=branch_id,
+            branch_ids=branch_ids,
         )
 
         if date_from:
@@ -288,6 +297,7 @@ class AnalyticsRepository:
         employee_id: Optional[int] = None,
         state_id: Optional[int] = None,
         branch_id: Optional[int] = None,
+        branch_ids: Optional[list[int]] = None,
         custom_from: Optional[date] = None,
         custom_to: Optional[date] = None,
     ) -> dict:
@@ -319,6 +329,7 @@ class AnalyticsRepository:
                 employee_id=employee_id,
                 state_id=state_id,
                 branch_id=branch_id,
+                branch_ids=branch_ids,
                 date_from=start,
                 date_to=end,
             )
@@ -333,6 +344,7 @@ class AnalyticsRepository:
                 employee_id=employee_id,
                 state_id=state_id,
                 branch_id=branch_id,
+                branch_ids=branch_ids,
                 date_from=filter_from,
                 date_to=filter_to,
             )
@@ -343,6 +355,7 @@ class AnalyticsRepository:
                 employee_id=employee_id,
                 state_id=state_id,
                 branch_id=branch_id,
+                branch_ids=branch_ids,
             )
             custom_sum = None
 
@@ -878,6 +891,7 @@ class AnalyticsRepository:
         employee_id: Optional[int] = None,
         state_id: Optional[int] = None,
         branch_id: Optional[int] = None,
+        branch_ids: Optional[list[int]] = None,
     ):
         from app.db.models.user import User, UserRole
 
@@ -888,7 +902,10 @@ class AnalyticsRepository:
         if employee_id is not None:
             query = query.filter(User.id == employee_id)
         query = apply_user_geo_filter(
-            query, state_id=state_id, branch_id=branch_id
+            query,
+            state_id=state_id,
+            branch_id=branch_id,
+            branch_ids=branch_ids,
         )
         return query.order_by(User.name.asc()).all()
 
@@ -991,6 +1008,7 @@ class AnalyticsRepository:
         employee_id: Optional[int] = None,
         state_id: Optional[int] = None,
         branch_id: Optional[int] = None,
+        branch_ids: Optional[list[int]] = None,
         date_from: Optional[date] = None,
         date_to: Optional[date] = None,
         stage: Optional[str] = None,
@@ -1002,6 +1020,7 @@ class AnalyticsRepository:
                 employee_id=employee_id,
                 state_id=state_id,
                 branch_id=branch_id,
+                branch_ids=branch_ids,
                 stage=stage,
                 source=source,
                 date_from=date_from,

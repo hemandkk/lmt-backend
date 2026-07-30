@@ -24,6 +24,7 @@ from app.dependencies.permissions import (
     deny_if_cannot_mutate_payments,
     ensure_payment_access,
     ensure_prospect_access,
+    ensure_prospect_editable,
     require_payment_verifier,
     resolve_employee_scope,
 )
@@ -113,7 +114,7 @@ async def create_payment(
     except ValidationError as ex:
         raise HTTPException(status_code=422, detail=ex.errors()) from ex
 
-    ensure_prospect_access(db, payment.prospect_id, current_user)
+    ensure_prospect_editable(db, payment.prospect_id, current_user)
     service = PaymentService(db)
     try:
         return service.create_payment(
@@ -136,19 +137,23 @@ def list_payments(
     ),
     state_id: int | None = Query(None, alias="stateId"),
     branch_id: int | None = Query(None, alias="branchId"),
+    branch_ids: str | None = Query(None, alias="branchIds", description="CSV e.g. 1,2,3"),
     prospect_id: int | None = Query(None, alias="prospectId"),
     date_from: date | None = Query(None, alias="dateFrom"),
     date_to: date | None = Query(None, alias="dateTo"),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    from app.core.geo_scope import merge_geo_query_params
+    from app.core.geo_scope import merge_geo_query_params, parse_branch_ids
     from app.core.roles import visible_admission_stages_for_role
 
     scoped_employee_id = resolve_employee_scope(current_user, employee_id)
-    state_id, branch_id = merge_geo_query_params(
-        current_user, state_id, branch_id
+    geo = merge_geo_query_params(
+        current_user, state_id, branch_id, parse_branch_ids(branch_ids)
     )
+    state_id = geo.state_id
+    branch_id = geo.branch_id
+    branch_ids = geo.normalized_branch_ids()
     forced = visible_admission_stages_for_role(current_user)
     admission_stages = (
         [s.value for s in forced] if forced is not None else None
@@ -160,6 +165,7 @@ def list_payments(
         assigned_to_id=scoped_employee_id,
         state_id=state_id,
         branch_id=branch_id,
+        branch_ids=branch_ids,
         prospect_id=prospect_id,
         admission_stages=admission_stages,
         date_from=date_from,
@@ -175,6 +181,7 @@ def payments_summary(
     employee_id: int | None = Query(None, alias="employeeId"),
     state_id: int | None = Query(None, alias="stateId"),
     branch_id: int | None = Query(None, alias="branchId"),
+    branch_ids: str | None = Query(None, alias="branchIds", description="CSV e.g. 1,2,3"),
     prospect_id: int | None = Query(None, alias="prospectId"),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
@@ -182,12 +189,15 @@ def payments_summary(
     """
     Payment KPIs. Declared before /{payment_id} so 'summary' is not treated as an id.
     """
-    from app.core.geo_scope import merge_geo_query_params
+    from app.core.geo_scope import merge_geo_query_params, parse_branch_ids
 
     scoped_employee_id = resolve_employee_scope(current_user, employee_id)
-    state_id, branch_id = merge_geo_query_params(
-        current_user, state_id, branch_id
+    geo = merge_geo_query_params(
+        current_user, state_id, branch_id, parse_branch_ids(branch_ids)
     )
+    state_id = geo.state_id
+    branch_id = geo.branch_id
+    branch_ids = geo.normalized_branch_ids()
     if prospect_id is not None:
         ensure_prospect_access(db, prospect_id, current_user)
 
@@ -195,6 +205,7 @@ def payments_summary(
         assigned_to_id=scoped_employee_id,
         state_id=state_id,
         branch_id=branch_id,
+        branch_ids=branch_ids,
         prospect_id=prospect_id,
         date_from=date_from,
         date_to=date_to,

@@ -819,6 +819,7 @@ class ReportService:
         employee_id: Optional[int] = None,
         state_id: Optional[int] = None,
         branch_id: Optional[int] = None,
+        branch_ids: Optional[list[int]] = None,
     ) -> IncentiveReportResponse:
         # 1. Parse date ranges
         date_from, date_to, month_label = ReportService._parse_month(month)
@@ -829,6 +830,7 @@ class ReportService:
             employee_id=employee_id,
             state_id=state_id,
             branch_id=branch_id,
+            branch_ids=branch_ids,
         )
         # 3. Fallback logic if explicit ID is missing/inactive
         # If filtering a specific id that is inactive/missing, still try that user

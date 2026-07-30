@@ -17,6 +17,7 @@ from app.repositories.branch_repository import BranchRepository
 from app.repositories.state_repository import StateRepository
 from app.repositories.user_repository import UserRepository
 from app.schemas.employee import (
+    EmployeeBranchItem,
     EmployeeCreate,
     EmployeeListResponse,
     EmployeeResponse,
@@ -108,9 +109,64 @@ class EmployeeService:
         """Returns (required, allow_state_only)."""
         if role in GEO_OPTIONAL_ROLES:
             return False, True
+        if role == UserRole.sales_head:
+            # State + branchIds (multi); handled separately from single branchId
+            return True, True
         if role in SALES_ROLES:
             return True, False
         return True, False
+
+    @staticmethod
+    def _resolve_sales_head_branches(
+        db: Session,
+        state_id: int | None,
+        branch_ids: list[int] | None,
+        branch_id: int | None = None,
+    ) -> tuple[int, int, list]:
+        """
+        Sales head: require stateId and at least one branch in that state.
+        Returns (state_id, primary_branch_id, branch_objects).
+        """
+        from app.db.models.branch import Branch
+
+        if state_id is None:
+            raise ValueError("stateId is required for sales_head.")
+        state = StateRepository.get_by_id(db, state_id)
+        if not state or not state.is_active:
+            raise ValueError("stateId must be an active state.")
+
+        ids: list[int] = []
+        for raw in branch_ids or []:
+            ids.append(int(raw))
+        if branch_id is not None and int(branch_id) not in ids:
+            ids.insert(0, int(branch_id))
+
+        # Dedupe preserve order
+        seen: set[int] = set()
+        ordered: list[int] = []
+        for bid in ids:
+            if bid not in seen:
+                seen.add(bid)
+                ordered.append(bid)
+
+        if not ordered:
+            raise ValueError(
+                "branchIds is required for sales_head "
+                "(select one or more branches in the state)."
+            )
+
+        branches: list[Branch] = []
+        for bid in ordered:
+            branch = BranchRepository.get_by_id(db, bid)
+            if not branch or not branch.is_active:
+                raise ValueError(f"branchId {bid} must be an active branch.")
+            if branch.state_id != state_id:
+                raise ValueError(
+                    f"branchId {bid} does not belong to the selected state."
+                )
+            branches.append(branch)
+
+        return state_id, ordered[0], branches
 
     @staticmethod
     def _to_response(db: Session, user: User) -> EmployeeResponse:
@@ -144,6 +200,21 @@ class EmployeeService:
         sales_head = getattr(user, "reports_to_sales_head", None)
         state = getattr(user, "state", None)
         branch = getattr(user, "branch", None)
+
+        assigned_branches = list(getattr(user, "assigned_branches", None) or [])
+        if not assigned_branches and branch is not None:
+            assigned_branches = [branch]
+        branch_items = [
+            EmployeeBranchItem(
+                id=b.id,
+                name=b.name,
+                branch_code=b.branch_code,
+                state_id=b.state_id,
+            )
+            for b in assigned_branches
+        ]
+        branch_ids = [b.id for b in assigned_branches]
+
         return EmployeeResponse(
             id=user.id,
             name=user.name,
@@ -176,6 +247,8 @@ class EmployeeService:
             branch_id=user.branch_id,
             branch_name=branch.name if branch is not None else None,
             branch_code=branch.branch_code if branch is not None else None,
+            branch_ids=branch_ids,
+            branches=branch_items,
             last_login=user.last_login,
             created_at=getattr(user, "created_at", None),
             updated_at=getattr(user, "updated_at", None),
@@ -207,6 +280,7 @@ class EmployeeService:
         all_records: bool = False,
         state_id: int | None = None,
         branch_id: int | None = None,
+        branch_ids: list[int] | None = None,
     ) -> EmployeeListResponse:
         if sales_only:
             # Dashboard / assign dropdowns: sales employees only (not mgr/head)
@@ -232,10 +306,14 @@ class EmployeeService:
         if is_active is not None:
             query = query.filter(User.is_active.is_(is_active))
 
-        if state_id is not None:
-            query = query.filter(User.state_id == state_id)
-        if branch_id is not None:
-            query = query.filter(User.branch_id == branch_id)
+        from app.core.geo_scope import apply_user_geo_filter
+
+        query = apply_user_geo_filter(
+            query,
+            state_id=state_id,
+            branch_id=branch_id,
+            branch_ids=branch_ids,
+        )
 
         if search:
             pattern = f"%{search.strip()}%"
@@ -318,13 +396,24 @@ class EmployeeService:
         required_geo, allow_state_only = EmployeeService._geo_rules_for_role(
             role
         )
-        state_id, branch_id = EmployeeService._resolve_state_branch(
-            db,
-            payload.state_id,
-            payload.branch_id,
-            required=required_geo,
-            allow_state_only=allow_state_only,
-        )
+        assigned_branch_objs: list = []
+        if role == UserRole.sales_head:
+            state_id, branch_id, assigned_branch_objs = (
+                EmployeeService._resolve_sales_head_branches(
+                    db,
+                    payload.state_id,
+                    payload.branch_ids,
+                    payload.branch_id,
+                )
+            )
+        else:
+            state_id, branch_id = EmployeeService._resolve_state_branch(
+                db,
+                payload.state_id,
+                payload.branch_id,
+                required=required_geo,
+                allow_state_only=allow_state_only,
+            )
 
         user = User(
             name=payload.name,
@@ -342,6 +431,8 @@ class EmployeeService:
             state_id=state_id,
             branch_id=branch_id,
         )
+        if assigned_branch_objs:
+            user.assigned_branches = list(assigned_branch_objs)
 
         try:
             db.add(user)
@@ -445,6 +536,8 @@ class EmployeeService:
             if role != UserRole.employee:
                 user.reports_to_manager_id = None
                 user.reports_to_sales_head_id = None
+            if role != UserRole.sales_head:
+                user.assigned_branches = []
 
         if data.get("clear_monthly_target"):
             user.monthly_sales_target = None
@@ -470,22 +563,59 @@ class EmployeeService:
         required_geo, allow_state_only = EmployeeService._geo_rules_for_role(
             user.role
         )
-        touching_geo = "state_id" in data or "branch_id" in data
-        next_state = data["state_id"] if "state_id" in data else user.state_id
-        next_branch = data["branch_id"] if "branch_id" in data else user.branch_id
-        missing_required = required_geo and (
-            user.state_id is None or user.branch_id is None
+        touching_geo = (
+            "state_id" in data
+            or "branch_id" in data
+            or "branch_ids" in data
         )
-        if touching_geo or missing_required:
-            sid, bid = EmployeeService._resolve_state_branch(
-                db,
-                next_state,
-                next_branch,
-                required=required_geo,
-                allow_state_only=allow_state_only,
+        if user.role == UserRole.sales_head:
+            existing_ids = [
+                b.id for b in (getattr(user, "assigned_branches", None) or [])
+            ]
+            if not existing_ids and user.branch_id is not None:
+                existing_ids = [user.branch_id]
+            missing_required = (
+                user.state_id is None or not existing_ids
             )
-            user.state_id = sid
-            user.branch_id = bid
+            if touching_geo or missing_required:
+                next_state = (
+                    data["state_id"] if "state_id" in data else user.state_id
+                )
+                next_ids = (
+                    data["branch_ids"]
+                    if "branch_ids" in data
+                    else existing_ids
+                )
+                next_primary = (
+                    data["branch_id"]
+                    if "branch_id" in data
+                    else user.branch_id
+                )
+                sid, bid, branches = EmployeeService._resolve_sales_head_branches(
+                    db, next_state, next_ids, next_primary
+                )
+                user.state_id = sid
+                user.branch_id = bid
+                user.assigned_branches = list(branches)
+        else:
+            next_state = data["state_id"] if "state_id" in data else user.state_id
+            next_branch = (
+                data["branch_id"] if "branch_id" in data else user.branch_id
+            )
+            missing_required = required_geo and (
+                user.state_id is None or user.branch_id is None
+            )
+            if touching_geo or missing_required:
+                sid, bid = EmployeeService._resolve_state_branch(
+                    db,
+                    next_state,
+                    next_branch,
+                    required=required_geo,
+                    allow_state_only=allow_state_only,
+                )
+                user.state_id = sid
+                user.branch_id = bid
+                user.assigned_branches = []
 
         db.commit()
         return EmployeeService.get(db, user.id)

@@ -115,15 +115,19 @@ def list_payment_requests(
     date_to: date | None = Query(None, alias="dateTo"),
     state_id: int | None = Query(None, alias="stateId"),
     branch_id: int | None = Query(None, alias="branchId"),
+    branch_ids: str | None = Query(None, alias="branchIds", description="CSV e.g. 1,2,3"),
     search: str | None = Query(None),
     db: Session = Depends(get_db),
     current_user: User = Depends(require_payment_request_manager),
 ):
-    from app.core.geo_scope import merge_geo_query_params
+    from app.core.geo_scope import merge_geo_query_params, parse_branch_ids
 
-    state_id, branch_id = merge_geo_query_params(
-        current_user, state_id, branch_id
+    geo = merge_geo_query_params(
+        current_user, state_id, branch_id, parse_branch_ids(branch_ids)
     )
+    state_id = geo.state_id
+    branch_id = geo.branch_id
+    branch_ids = geo.normalized_branch_ids()
     return PaymentRequestService(db).list(
         page=page,
         page_size=page_size,
@@ -133,6 +137,7 @@ def list_payment_requests(
         search=search,
         state_id=state_id,
         branch_id=branch_id,
+        branch_ids=branch_ids,
     )
 
 

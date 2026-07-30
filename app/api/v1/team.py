@@ -19,6 +19,7 @@ from app.schemas.team import (
     TeamSupervisorListResponse,
 )
 from app.services.team_export_service import TeamExportService
+from app.core.geo_scope import parse_branch_ids
 from app.services.team_service import TeamService
 
 router = APIRouter(prefix="/team", tags=["Team Dashboard"])
@@ -31,6 +32,7 @@ def list_supervisors(
     ),
     state_id: Optional[int] = Query(None, alias="stateId"),
     branch_id: Optional[int] = Query(None, alias="branchId"),
+    branch_ids: Optional[str] = Query(None, alias="branchIds", description="CSV e.g. 1,2,3 (sales_head / admin)"),
     db: Session = Depends(get_db),
     current_user: User = Depends(require_admin),
 ):
@@ -41,6 +43,7 @@ def list_supervisors(
             role=role,
             state_id=state_id,
             branch_id=branch_id,
+            branch_ids=parse_branch_ids(branch_ids),
         )
     except ValueError as ex:
         raise HTTPException(status_code=400, detail=str(ex)) from ex
@@ -51,6 +54,7 @@ def list_team_members(
     supervisor_id: Optional[int] = Query(None, alias="supervisorId"),
     state_id: Optional[int] = Query(None, alias="stateId"),
     branch_id: Optional[int] = Query(None, alias="branchId"),
+    branch_ids: Optional[str] = Query(None, alias="branchIds", description="CSV e.g. 1,2,3 (sales_head / admin)"),
     db: Session = Depends(get_db),
     current_user: User = Depends(require_team_viewer),
 ):
@@ -65,6 +69,7 @@ def list_team_members(
             supervisor_id=supervisor_id,
             state_id=state_id,
             branch_id=branch_id,
+            branch_ids=parse_branch_ids(branch_ids),
         )
     except ValueError as ex:
         raise HTTPException(status_code=400, detail=str(ex)) from ex
@@ -116,6 +121,7 @@ def team_overview(
     supervisor_id: Optional[int] = Query(None, alias="supervisorId"),
     state_id: Optional[int] = Query(None, alias="stateId"),
     branch_id: Optional[int] = Query(None, alias="branchId"),
+    branch_ids: Optional[str] = Query(None, alias="branchIds", description="CSV e.g. 1,2,3 (sales_head / admin)"),
     db: Session = Depends(get_db),
     current_user: User = Depends(require_team_viewer),
 ):
@@ -134,6 +140,7 @@ def team_overview(
             supervisor_id=supervisor_id,
             state_id=state_id,
             branch_id=branch_id,
+            branch_ids=parse_branch_ids(branch_ids),
         )
     except ValueError as ex:
         raise HTTPException(status_code=400, detail=str(ex)) from ex
@@ -147,6 +154,7 @@ def team_sales(
     supervisor_id: Optional[int] = Query(None, alias="supervisorId"),
     state_id: Optional[int] = Query(None, alias="stateId"),
     branch_id: Optional[int] = Query(None, alias="branchId"),
+    branch_ids: Optional[str] = Query(None, alias="branchIds", description="CSV e.g. 1,2,3 (sales_head / admin)"),
     db: Session = Depends(get_db),
     current_user: User = Depends(require_team_viewer),
 ):
@@ -160,6 +168,7 @@ def team_sales(
             supervisor_id=supervisor_id,
             state_id=state_id,
             branch_id=branch_id,
+            branch_ids=parse_branch_ids(branch_ids),
         )
     except ValueError as ex:
         raise HTTPException(status_code=400, detail=str(ex)) from ex
@@ -173,6 +182,7 @@ def team_performance(
     supervisor_id: Optional[int] = Query(None, alias="supervisorId"),
     state_id: Optional[int] = Query(None, alias="stateId"),
     branch_id: Optional[int] = Query(None, alias="branchId"),
+    branch_ids: Optional[str] = Query(None, alias="branchIds", description="CSV e.g. 1,2,3 (sales_head / admin)"),
     db: Session = Depends(get_db),
     current_user: User = Depends(require_team_viewer),
 ):
@@ -186,6 +196,7 @@ def team_performance(
             supervisor_id=supervisor_id,
             state_id=state_id,
             branch_id=branch_id,
+            branch_ids=parse_branch_ids(branch_ids),
         )
     except ValueError as ex:
         raise HTTPException(status_code=400, detail=str(ex)) from ex
@@ -199,6 +210,7 @@ def team_payments(
     supervisor_id: Optional[int] = Query(None, alias="supervisorId"),
     state_id: Optional[int] = Query(None, alias="stateId"),
     branch_id: Optional[int] = Query(None, alias="branchId"),
+    branch_ids: Optional[str] = Query(None, alias="branchIds", description="CSV e.g. 1,2,3 (sales_head / admin)"),
     db: Session = Depends(get_db),
     current_user: User = Depends(require_team_viewer),
 ):
@@ -212,6 +224,7 @@ def team_payments(
             supervisor_id=supervisor_id,
             state_id=state_id,
             branch_id=branch_id,
+            branch_ids=parse_branch_ids(branch_ids),
         )
     except ValueError as ex:
         raise HTTPException(status_code=400, detail=str(ex)) from ex
@@ -225,6 +238,7 @@ def team_analytics(
     supervisor_id: Optional[int] = Query(None, alias="supervisorId"),
     state_id: Optional[int] = Query(None, alias="stateId"),
     branch_id: Optional[int] = Query(None, alias="branchId"),
+    branch_ids: Optional[str] = Query(None, alias="branchIds", description="CSV e.g. 1,2,3 (sales_head / admin)"),
     db: Session = Depends(get_db),
     current_user: User = Depends(require_team_viewer),
 ):
@@ -238,6 +252,7 @@ def team_analytics(
             supervisor_id=supervisor_id,
             state_id=state_id,
             branch_id=branch_id,
+            branch_ids=parse_branch_ids(branch_ids),
         )
     except ValueError as ex:
         raise HTTPException(status_code=400, detail=str(ex)) from ex
@@ -253,6 +268,7 @@ def team_exports(
     supervisor_id: Optional[int] = Query(None, alias="supervisorId"),
     state_id: Optional[int] = Query(None, alias="stateId"),
     branch_id: Optional[int] = Query(None, alias="branchId"),
+    branch_ids: Optional[str] = Query(None, alias="branchIds", description="CSV e.g. 1,2,3 (sales_head / admin)"),
     db: Session = Depends(get_db),
     current_user: User = Depends(require_team_viewer),
 ):
@@ -269,6 +285,7 @@ def team_exports(
             supervisor_id=supervisor_id,
             state_id=state_id,
             branch_id=branch_id,
+            branch_ids=parse_branch_ids(branch_ids),
         )
     except ValueError as ex:
         raise HTTPException(status_code=400, detail=str(ex)) from ex

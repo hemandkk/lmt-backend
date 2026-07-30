@@ -69,6 +69,7 @@ class ProspectRepository:
         assigned_to_id: int | None = None,
         state_id: int | None = None,
         branch_id: int | None = None,
+        branch_ids: List[int] | None = None,
         course_id: int | None = None,
         created_from=None,
         created_to=None,
@@ -82,11 +83,11 @@ class ProspectRepository:
             assigned_to_id=assigned_to_id,
             state_id=state_id,
             branch_id=branch_id,
+            branch_ids=branch_ids,
             course_id=course_id,
             created_from=created_from,
             created_to=created_to,
         )
-
         total = query.count()
         items = (
             query.order_by(Prospect.created_at.desc())
@@ -106,6 +107,7 @@ class ProspectRepository:
         assigned_to_id: int | None = None,
         state_id: int | None = None,
         branch_id: int | None = None,
+        branch_ids: List[int] | None = None,
         course_id: int | None = None,
     ) -> List[Prospect]:
         return (
@@ -118,6 +120,7 @@ class ProspectRepository:
                 assigned_to_id=assigned_to_id,
                 state_id=state_id,
                 branch_id=branch_id,
+                branch_ids=branch_ids,
                 course_id=course_id,
             )
             .order_by(Prospect.created_at.desc())
@@ -134,6 +137,7 @@ class ProspectRepository:
         assigned_to_id: int | None = None,
         state_id: int | None = None,
         branch_id: int | None = None,
+        branch_ids: List[int] | None = None,
         course_id: int | None = None,
         created_from=None,
         created_to=None,
@@ -146,7 +150,7 @@ class ProspectRepository:
             query = query.filter(Prospect.assigned_to_id == assigned_to_id)
 
         query = apply_prospect_assignee_geo(
-            query, state_id=state_id, branch_id=branch_id
+            query, state_id=state_id, branch_id=branch_id, branch_ids=branch_ids
         )
 
         if course_id is not None:

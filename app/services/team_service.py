@@ -32,6 +32,7 @@ class TeamService:
         supervisor_id: Optional[int] = None,
         state_id: Optional[int] = None,
         branch_id: Optional[int] = None,
+        branch_ids: Optional[list[int]] = None,
     ) -> list[int]:
         """
         Resolve which users are in scope for the viewer.
@@ -40,16 +41,20 @@ class TeamService:
         """
         from app.core.geo_scope import apply_user_geo_filter, merge_geo_query_params
 
-        state_id, branch_id = merge_geo_query_params(
-            viewer, state_id, branch_id
+        geo = merge_geo_query_params(
+            viewer, state_id, branch_id, branch_ids
         )
+        state_id = geo.state_id
+        branch_ids_resolved = geo.normalized_branch_ids()
 
         query = db.query(User.id).filter(
             User.role.in_([UserRole.employee, UserRole.manager, UserRole.sales_head]),
             User.is_active.is_(True),
         )
         query = apply_user_geo_filter(
-            query, state_id=state_id, branch_id=branch_id
+            query,
+            state_id=state_id,
+            branch_ids=branch_ids_resolved,
         )
 
         if is_admin(viewer):
@@ -91,8 +96,8 @@ class TeamService:
                 raise ValueError("employeeId must be an active user.")
             if state_id is not None and emp.state_id != state_id:
                 raise ValueError("employeeId is not in the selected state.")
-            if branch_id is not None and emp.branch_id != branch_id:
-                raise ValueError("employeeId is not in the selected branch.")
+            if branch_ids_resolved and emp.branch_id not in branch_ids_resolved:
+                raise ValueError("employeeId is not in the selected branch(es).")
             return [employee_id]
 
         if employee_id not in ids:
@@ -105,6 +110,7 @@ class TeamService:
         role: Optional[str] = None,
         state_id: Optional[int] = None,
         branch_id: Optional[int] = None,
+        branch_ids: Optional[list[int]] = None,
     ) -> dict:
         from app.core.geo_scope import apply_user_geo_filter
 
@@ -113,7 +119,7 @@ class TeamService:
             User.is_active.is_(True),
         )
         query = apply_user_geo_filter(
-            query, state_id=state_id, branch_id=branch_id
+            query, state_id=state_id, branch_id=branch_id, branch_ids=branch_ids
         )
         if role:
             from app.core.roles import normalize_role
@@ -145,6 +151,7 @@ class TeamService:
         supervisor_id: Optional[int] = None,
         state_id: Optional[int] = None,
         branch_id: Optional[int] = None,
+        branch_ids: Optional[list[int]] = None,
     ) -> dict:
         ids = TeamService.resolve_team_member_ids(
             db,
@@ -152,6 +159,7 @@ class TeamService:
             supervisor_id=supervisor_id,
             state_id=state_id,
             branch_id=branch_id,
+            branch_ids=branch_ids,
         )
         if not ids:
             return {"items": [], "total": 0}
@@ -330,6 +338,7 @@ class TeamService:
         supervisor_id: Optional[int] = None,
         state_id: Optional[int] = None,
         branch_id: Optional[int] = None,
+        branch_ids: Optional[list[int]] = None,
     ) -> dict:
         ids = TeamService.resolve_team_member_ids(
             db,
@@ -338,6 +347,7 @@ class TeamService:
             supervisor_id=supervisor_id,
             state_id=state_id,
             branch_id=branch_id,
+            branch_ids=branch_ids,
         )
         items = []
         high = average = low = 0
@@ -432,6 +442,7 @@ class TeamService:
         supervisor_id: Optional[int] = None,
         state_id: Optional[int] = None,
         branch_id: Optional[int] = None,
+        branch_ids: Optional[list[int]] = None,
     ) -> dict:
         ids = TeamService.resolve_team_member_ids(
             db,
@@ -440,6 +451,7 @@ class TeamService:
             supervisor_id=supervisor_id,
             state_id=state_id,
             branch_id=branch_id,
+            branch_ids=branch_ids,
         )
         items=[]
         total_revenue = Decimal("0")
@@ -559,6 +571,7 @@ class TeamService:
         supervisor_id: Optional[int] = None,
         state_id: Optional[int] = None,
         branch_id: Optional[int] = None,
+        branch_ids: Optional[list[int]] = None,
     ) -> dict:
         ids = TeamService.resolve_team_member_ids(
             db,
@@ -567,6 +580,7 @@ class TeamService:
             supervisor_id=supervisor_id,
             state_id=state_id,
             branch_id=branch_id,
+            branch_ids=branch_ids,
         )
         collected = {
             "today": Decimal("0"),
@@ -652,6 +666,7 @@ class TeamService:
         supervisor_id: Optional[int] = None,
         state_id: Optional[int] = None,
         branch_id: Optional[int] = None,
+        branch_ids: Optional[list[int]] = None,
     ) -> dict:
         ids = TeamService.resolve_team_member_ids(
             db,
@@ -660,6 +675,7 @@ class TeamService:
             supervisor_id=supervisor_id,
             state_id=state_id,
             branch_id=branch_id,
+            branch_ids=branch_ids,
         )
         stage_map: dict[str, int] = {}
         total_admissions = 0
@@ -751,6 +767,7 @@ class TeamService:
         supervisor_id: Optional[int] = None,
         state_id: Optional[int] = None,
         branch_id: Optional[int] = None,
+        branch_ids: Optional[list[int]] = None,
     ) -> dict:
         perf = TeamService.performance(
             db,
@@ -761,6 +778,7 @@ class TeamService:
             supervisor_id=supervisor_id,
             state_id=state_id,
             branch_id=branch_id,
+            branch_ids=branch_ids,
         )
         sales = TeamService.sales(
             db,
@@ -771,6 +789,7 @@ class TeamService:
             supervisor_id=supervisor_id,
             state_id=state_id,
             branch_id=branch_id,
+            branch_ids=branch_ids,
         )
         return {
             "team_size": perf["total"],

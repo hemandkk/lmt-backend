@@ -150,6 +150,7 @@ def list_expenses(
     date_to: date | None = Query(None, alias="dateTo"),
     state_id: int | None = Query(None, alias="stateId"),
     branch_id: int | None = Query(None, alias="branchId"),
+    branch_ids: str | None = Query(None, alias="branchIds", description="CSV e.g. 1,2,3"),
     search: str | None = Query(None),
     expense_type: str | None = Query(
         None,
@@ -164,10 +165,14 @@ def list_expenses(
     db: Session = Depends(get_db),
     current_user: User = Depends(require_expense_manager),
 ):
-    from app.core.geo_scope import merge_geo_query_params
-    state_id, branch_id = merge_geo_query_params(
-        current_user, state_id, branch_id
+    from app.core.geo_scope import merge_geo_query_params, parse_branch_ids
+
+    geo = merge_geo_query_params(
+        current_user, state_id, branch_id, parse_branch_ids(branch_ids)
     )
+    state_id = geo.state_id
+    branch_id = geo.branch_id
+    branch_ids = geo.normalized_branch_ids()
     return ExpenseService(db).list(
         page=page,
         page_size=page_size,
@@ -178,7 +183,48 @@ def list_expenses(
         employee_id=employee_id,
         state_id=state_id,
         branch_id=branch_id,
+        branch_ids=branch_ids,
     )
+
+
+@router.get("/export")
+def export_expenses(
+    date_from: date | None = Query(None, alias="dateFrom"),
+    date_to: date | None = Query(None, alias="dateTo"),
+    state_id: int | None = Query(None, alias="stateId"),
+    branch_id: int | None = Query(None, alias="branchId"),
+    branch_ids: str | None = Query(None, alias="branchIds", description="CSV e.g. 1,2,3"),
+    search: str | None = Query(None),
+    expense_type: str | None = Query(None, alias="expenseType"),
+    employee_id: int | None = Query(None, alias="employeeId"),
+    fmt: str = Query("xlsx", alias="format", description="xlsx | csv"),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(require_expense_manager),
+):
+    """Download filtered expenses as Excel/CSV. Same filters as list (no pagination)."""
+    from app.core.geo_scope import merge_geo_query_params, parse_branch_ids
+
+    try:
+        parsed_branch_ids = parse_branch_ids(branch_ids)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    geo = merge_geo_query_params(
+        current_user, state_id, branch_id, parsed_branch_ids
+    )
+    try:
+        return ExpenseService(db).export(
+            date_from=date_from,
+            date_to=date_to,
+            search=search,
+            expense_type=_parse_expense_type(expense_type),
+            employee_id=employee_id,
+            state_id=geo.state_id,
+            branch_id=geo.branch_id,
+            branch_ids=geo.normalized_branch_ids(),
+            fmt=fmt,
+        )
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @router.get("/{expense_id}", response_model=ExpenseResponse)

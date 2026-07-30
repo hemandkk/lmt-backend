@@ -468,13 +468,20 @@ class MasterService:
 
     @staticmethod
     def delete_branch(db: Session, branch_id: int):
+        from app.db.models.user import user_branches
+
         branch = BranchRepository.get_by_id(db, branch_id)
         if not branch:
             raise ValueError("Branch not found.")
         user_count = (
             db.query(User).filter(User.branch_id == branch_id).count()
         )
-        if user_count:
+        assigned_count = (
+            db.query(user_branches.c.user_id)
+            .filter(user_branches.c.branch_id == branch_id)
+            .count()
+        )
+        if user_count or assigned_count:
             raise ValueError(
                 "Cannot delete branch: employees are assigned to it."
             )

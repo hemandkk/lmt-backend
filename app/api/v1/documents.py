@@ -15,7 +15,7 @@ from app.db.models.prospect_document import DocumentType
 from app.db.models.user import User
 from app.db.session import get_db
 from app.dependencies.auth import get_current_user
-from app.dependencies.permissions import ensure_prospect_access
+from app.dependencies.permissions import ensure_prospect_access, ensure_prospect_editable
 from app.repositories.document_repository import DocumentRepository
 from app.schemas.document import (
     DocumentListResponse,
@@ -43,7 +43,7 @@ def upload_document(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    ensure_prospect_access(db, prospect_id, current_user)
+    ensure_prospect_editable(db, prospect_id, current_user)
     try:
         return DocumentService.upload_document(
             db=db,
@@ -93,7 +93,7 @@ def update_document(
 ):
     try:
         document = DocumentService.get_document(db, document_id)
-        ensure_prospect_access(db, document.prospect_id, current_user)
+        ensure_prospect_editable(db, document.prospect_id, current_user)
         return DocumentService.update_document(db, document_id, payload)
     except ValueError as ex:
         raise HTTPException(status_code=404, detail=str(ex))
@@ -107,7 +107,7 @@ def delete_document(
 ):
     try:
         document = DocumentService.get_document(db, document_id)
-        ensure_prospect_access(db, document.prospect_id, current_user)
+        ensure_prospect_editable(db, document.prospect_id, current_user)
         DocumentService.delete_document(db, document_id)
     except ValueError as ex:
         raise HTTPException(status_code=404, detail=str(ex))

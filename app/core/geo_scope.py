@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from typing import Any, Optional, Tuple
+from dataclasses import dataclass
+from typing import Any, Optional, Sequence, Tuple
 
 from sqlalchemy import false, func
 from sqlalchemy.orm import Query, aliased
@@ -10,8 +11,56 @@ from sqlalchemy.orm import Query, aliased
 from app.db.models.prospect import Prospect
 from app.db.models.user import User
 
-# Sales users without state+branch get this sentinel so filters match nothing.
+# Sales users without required geo get this sentinel so filters match nothing.
 _EMPTY_GEO_ID = -1
+
+
+@dataclass(frozen=True)
+class GeoFilter:
+    state_id: Optional[int] = None
+    branch_id: Optional[int] = None
+    branch_ids: Optional[Tuple[int, ...]] = None
+
+    @property
+    def is_empty(self) -> bool:
+        return self.state_id == _EMPTY_GEO_ID
+
+    def normalized_branch_ids(self) -> Optional[list[int]]:
+        if self.branch_ids:
+            return list(self.branch_ids)
+        if self.branch_id is not None:
+            return [int(self.branch_id)]
+        return None
+
+
+def parse_branch_ids(raw: Optional[str]) -> Optional[list[int]]:
+    """Parse CSV branchIds query param, e.g. '1,2,3'."""
+    if raw is None:
+        return None
+    text = str(raw).strip()
+    if not text:
+        return None
+    ids: list[int] = []
+    for part in text.split(","):
+        part = part.strip()
+        if not part:
+            continue
+        try:
+            ids.append(int(part))
+        except ValueError as exc:
+            raise ValueError(f"Invalid branchIds value: {part!r}") from exc
+    return ids or None
+
+
+def sales_head_assigned_branch_ids(user) -> list[int]:
+    """Branch IDs a sales_head may see (M2M, fallback to primary branch_id)."""
+    assigned = getattr(user, "assigned_branches", None) or []
+    ids = [int(b.id) for b in assigned]
+    if not ids:
+        primary = getattr(user, "branch_id", None)
+        if primary is not None:
+            ids = [int(primary)]
+    return ids
 
 
 def resolve_geo_scope(user) -> Tuple[Optional[int], Optional[int]]:
@@ -23,7 +72,11 @@ def resolve_geo_scope(user) -> Tuple[Optional[int], Optional[int]]:
         - no state → (None, None) — see all
         - state only → (state_id, None) — all branches in that state
         - state + branch → (state_id, branch_id) — that branch only
-    - Sales roles (and other non-admin):
+    - Sales head:
+        - state + assigned branches → (state_id, None) here;
+          merge_geo_query_params applies branch IN (assigned).
+        - no state / no branches → (-1, -1)
+    - Other sales roles:
         - both set → (state_id, branch_id)
         - otherwise → (-1, -1) — empty results
     """
@@ -31,6 +84,7 @@ def resolve_geo_scope(user) -> Tuple[Optional[int], Optional[int]]:
         is_admin,
         is_accountant,
         is_processing_team,
+        is_sales_head,
     )
 
     if is_admin(user):
@@ -47,6 +101,11 @@ def resolve_geo_scope(user) -> Tuple[Optional[int], Optional[int]]:
             int(branch_id) if branch_id is not None else None,
         )
 
+    if is_sales_head(user):
+        if state_id is None or not sales_head_assigned_branch_ids(user):
+            return _EMPTY_GEO_ID, _EMPTY_GEO_ID
+        return int(state_id), None
+
     if state_id is None or branch_id is None:
         return _EMPTY_GEO_ID, _EMPTY_GEO_ID
     return int(state_id), int(branch_id)
@@ -56,27 +115,80 @@ def merge_geo_query_params(
     user,
     requested_state_id: Optional[int] = None,
     requested_branch_id: Optional[int] = None,
-) -> Tuple[Optional[int], Optional[int]]:
+    requested_branch_ids: Optional[Sequence[int]] = None,
+) -> GeoFilter:
     """
-    Admin may use client stateId/branchId filters.
-    Non-admin is forced to their assigned geo (client params ignored).
+    Merge client geo filters with the viewer's forced scope.
+
+    - Admin: uses client stateId / branchId / branchIds.
+    - Sales head: forced to their state + assigned branches; client
+      branchId/branchIds may only narrow within that assigned set.
+    - Other non-admin: forced to resolve_geo_scope (client params ignored).
     """
-    from app.core.roles import is_admin
+    from app.core.roles import is_admin, is_sales_head
+
+    multi = tuple(int(x) for x in requested_branch_ids) if requested_branch_ids else None
+    if multi and len(multi) == 1 and requested_branch_id is None:
+        requested_branch_id = multi[0]
+        multi = None
+    if multi and requested_branch_id is not None and requested_branch_id not in multi:
+        multi = multi + (int(requested_branch_id),)
 
     if is_admin(user):
-        return requested_state_id, requested_branch_id
-    return resolve_geo_scope(user)
+        if multi:
+            return GeoFilter(
+                state_id=requested_state_id,
+                branch_ids=multi,
+            )
+        return GeoFilter(
+            state_id=requested_state_id,
+            branch_id=requested_branch_id,
+        )
+
+    forced_state, forced_branch = resolve_geo_scope(user)
+    if forced_state == _EMPTY_GEO_ID:
+        return GeoFilter(state_id=_EMPTY_GEO_ID, branch_id=_EMPTY_GEO_ID)
+
+    if is_sales_head(user):
+        allowed = sales_head_assigned_branch_ids(user)
+        if not allowed:
+            return GeoFilter(state_id=_EMPTY_GEO_ID, branch_id=_EMPTY_GEO_ID)
+
+        if multi:
+            narrowed = tuple(b for b in multi if b in allowed)
+            if not narrowed:
+                return GeoFilter(state_id=_EMPTY_GEO_ID, branch_id=_EMPTY_GEO_ID)
+            return GeoFilter(state_id=forced_state, branch_ids=narrowed)
+
+        if requested_branch_id is not None:
+            if int(requested_branch_id) not in allowed:
+                return GeoFilter(state_id=_EMPTY_GEO_ID, branch_id=_EMPTY_GEO_ID)
+            return GeoFilter(
+                state_id=forced_state,
+                branch_id=int(requested_branch_id),
+            )
+
+        return GeoFilter(
+            state_id=forced_state,
+            branch_ids=tuple(allowed),
+        )
+
+    return GeoFilter(state_id=forced_state, branch_id=forced_branch)
 
 
 def _user_matches_geo(
     target_user: Any,
     state_id: Optional[int],
     branch_id: Optional[int],
+    branch_ids: Optional[Sequence[int]] = None,
 ) -> bool:
     if target_user is None:
         return False
     if state_id is not None and getattr(target_user, "state_id", None) != state_id:
         return False
+    ids = list(branch_ids) if branch_ids else None
+    if ids:
+        return getattr(target_user, "branch_id", None) in ids
     if branch_id is not None and getattr(target_user, "branch_id", None) != branch_id:
         return False
     return True
@@ -84,10 +196,21 @@ def _user_matches_geo(
 
 def assignee_in_geo_scope(prospect, user) -> bool:
     """Whether the lead's assignee falls within the viewer's geo scope."""
-    from app.core.roles import is_admin
+    from app.core.roles import is_admin, is_sales_head
 
     if is_admin(user):
         return True
+
+    if is_sales_head(user):
+        geo = merge_geo_query_params(user)
+        if geo.is_empty:
+            return False
+        return _user_matches_geo(
+            getattr(prospect, "assigned_to", None),
+            geo.state_id,
+            geo.branch_id,
+            geo.normalized_branch_ids(),
+        )
 
     state_id, branch_id = resolve_geo_scope(user)
     if state_id is None and branch_id is None:
@@ -101,10 +224,7 @@ def assignee_in_geo_scope(prospect, user) -> bool:
 
 
 def related_user_in_geo_scope(viewer, *candidates: Any) -> bool:
-    """
-    Whether any preferred related user (first non-None wins) is in viewer geo.
-    Used for expenses / payment-requests (employee → requester → creator).
-    """
+    """Whether preferred related user is in viewer geo."""
     from app.core.roles import is_admin
 
     if is_admin(viewer):
@@ -152,20 +272,36 @@ def entity_in_geo_scope(viewer, row, *related_users: Any) -> bool:
     return True
 
 
+def _normalize_branch_ids(
+    branch_id: Optional[int],
+    branch_ids: Optional[Sequence[int]],
+) -> Optional[list[int]]:
+    if branch_ids:
+        return [int(x) for x in branch_ids]
+    if branch_id is not None:
+        return [int(branch_id)]
+    return None
+
+
 def apply_user_geo_filter(
     query: Query,
     *,
     state_id: Optional[int] = None,
     branch_id: Optional[int] = None,
+    branch_ids: Optional[Sequence[int]] = None,
     user_model=User,
 ) -> Query:
-    """Filter a User (or aliased User) query by state/branch."""
+    """Filter a User (or aliased User) query by state/branch(es)."""
     if state_id == _EMPTY_GEO_ID:
         return query.filter(false())
     if state_id is not None:
         query = query.filter(user_model.state_id == state_id)
-    if branch_id is not None:
-        query = query.filter(user_model.branch_id == branch_id)
+    ids = _normalize_branch_ids(branch_id, branch_ids)
+    if ids:
+        if len(ids) == 1:
+            query = query.filter(user_model.branch_id == ids[0])
+        else:
+            query = query.filter(user_model.branch_id.in_(ids))
     return query
 
 
@@ -174,14 +310,13 @@ def apply_related_user_geo(
     *user_id_columns,
     state_id: Optional[int] = None,
     branch_id: Optional[int] = None,
+    branch_ids: Optional[Sequence[int]] = None,
 ) -> Query:
-    """
-    Join an aliased User on coalesce(*user_id_columns) and filter by geo.
-    First non-null column wins (e.g. employee_id, requested_by_id, created_by_id).
-    """
+    """Join related User and filter by geo."""
     if state_id == _EMPTY_GEO_ID:
         return query.filter(false())
-    if state_id is None and branch_id is None:
+    ids = _normalize_branch_ids(branch_id, branch_ids)
+    if state_id is None and not ids:
         return query
     if not user_id_columns:
         return query
@@ -194,7 +329,11 @@ def apply_related_user_geo(
     )
     query = query.join(geo_user, geo_user.id == geo_user_id)
     return apply_user_geo_filter(
-        query, state_id=state_id, branch_id=branch_id, user_model=geo_user
+        query,
+        state_id=state_id,
+        branch_id=branch_id,
+        branch_ids=branch_ids,
+        user_model=geo_user,
     )
 
 
@@ -206,6 +345,7 @@ def apply_entity_geo_filter(
     user_id_columns: Tuple,
     state_id: Optional[int] = None,
     branch_id: Optional[int] = None,
+    branch_ids: Optional[Sequence[int]] = None,
 ) -> Query:
     """
     Filter by COALESCE(stored state/branch, related-user state/branch).
@@ -213,7 +353,8 @@ def apply_entity_geo_filter(
     """
     if state_id == _EMPTY_GEO_ID:
         return query.filter(false())
-    if state_id is None and branch_id is None:
+    ids = _normalize_branch_ids(branch_id, branch_ids)
+    if state_id is None and not ids:
         return query
     if not user_id_columns:
         return query
@@ -227,10 +368,12 @@ def apply_entity_geo_filter(
     query = query.outerjoin(geo_user, geo_user.id == geo_user_id)
     if state_id is not None:
         query = query.filter(func.coalesce(state_col, geo_user.state_id) == state_id)
-    if branch_id is not None:
-        query = query.filter(
-            func.coalesce(branch_col, geo_user.branch_id) == branch_id
-        )
+    if ids:
+        effective_branch = func.coalesce(branch_col, geo_user.branch_id)
+        if len(ids) == 1:
+            query = query.filter(effective_branch == ids[0])
+        else:
+            query = query.filter(effective_branch.in_(ids))
     return query
 
 
@@ -302,16 +445,23 @@ def apply_prospect_assignee_geo(
     *,
     state_id: Optional[int] = None,
     branch_id: Optional[int] = None,
+    branch_ids: Optional[Sequence[int]] = None,
     user_already_joined: bool = False,
 ) -> Query:
     """
-    Constrain prospects to those whose assignee belongs to state/branch.
+    Constrain prospects to those whose assignee belongs to state/branch(es).
     Joins User on assigned_to_id when needed.
     """
     if state_id == _EMPTY_GEO_ID:
         return query.filter(false())
-    if state_id is None and branch_id is None:
+    ids = _normalize_branch_ids(branch_id, branch_ids)
+    if state_id is None and not ids:
         return query
     if not user_already_joined:
         query = query.join(User, User.id == Prospect.assigned_to_id)
-    return apply_user_geo_filter(query, state_id=state_id, branch_id=branch_id)
+    return apply_user_geo_filter(
+        query,
+        state_id=state_id,
+        branch_id=branch_id,
+        branch_ids=branch_ids,
+    )

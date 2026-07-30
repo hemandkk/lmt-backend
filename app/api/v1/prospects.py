@@ -352,7 +352,14 @@ def _parse_multipart_lead(form, model_cls):
 
 
 def _employee_scope_id(user: User) -> int | None:
-    """Sales roles (employee/manager/sales_head) only see their own leads."""
+    """
+    Own-lead list scope for employee/manager.
+    Sales head is not self-scoped — they see assigned-branch admissions (view).
+    """
+    from app.core.roles import is_sales_head
+
+    if is_sales_head(user):
+        return None
     if is_sales_user(user):
         return user.id
     return None
@@ -364,6 +371,21 @@ def _ensure_prospect_access(prospect, user: User) -> None:
     raise HTTPException(
         status_code=status.HTTP_403_FORBIDDEN,
         detail="You do not have access to this prospect.",
+    )
+
+
+def _ensure_prospect_editable(prospect, user: User) -> None:
+    from app.core.roles import prospect_editable_by_user
+
+    _ensure_prospect_access(prospect, user)
+    if prospect_editable_by_user(prospect, user):
+        return
+    raise HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail=(
+            "You can view this admission but cannot edit it. "
+            "Only leads assigned to you may be modified."
+        ),
     )
 
 
@@ -425,6 +447,7 @@ def list_prospects(
     assigned_to_id: int | None = Query(None, alias="assignedToId"),
     state_id: int | None = Query(None, alias="stateId"),
     branch_id: int | None = Query(None, alias="branchId"),
+    branch_ids: str | None = Query(None, alias="branchIds", description="CSV e.g. 1,2,3"),
     created_from: date | None = Query(None, alias="createdFrom"),
     created_to: date | None = Query(None, alias="createdTo"),
     db: Session = Depends(get_db),
@@ -433,9 +456,10 @@ def list_prospects(
     """
     Role-scoped lead list:
     - admin: all (optional filters)
-    - employee: assigned leads only
-    - accountant: all leads //in certificate_waiting (any assignee)
-    - processing_team: all leads // in waiting_result / result_announced
+    - employee / manager: assigned leads only
+    - sales_head: all leads whose assignee is in their assigned branches
+      (optional branchIds narrows; view-only for others' leads)
+    - accountant / processing_team: all leads (geo-scoped)
     """
     scope_id = _employee_scope_id(current_user)
     if scope_id is not None:
@@ -452,11 +476,14 @@ def list_prospects(
     ):
         assigned_to_id = None
 
-    from app.core.geo_scope import merge_geo_query_params
+    from app.core.geo_scope import merge_geo_query_params, parse_branch_ids
 
-    state_id, branch_id = merge_geo_query_params(
-        current_user, state_id, branch_id
+    geo = merge_geo_query_params(
+        current_user, state_id, branch_id, parse_branch_ids(branch_ids)
     )
+    state_id = geo.state_id
+    branch_id = geo.branch_id
+    branch_ids = geo.normalized_branch_ids()
 
     try:
         stage_filter = _parse_admission_stage_filters(
@@ -472,6 +499,7 @@ def list_prospects(
             assigned_to_id=assigned_to_id,
             state_id=state_id,
             branch_id=branch_id,
+            branch_ids=branch_ids,
             course_id=course_id,
             created_from=created_from,
             created_to=created_to,
@@ -494,6 +522,7 @@ def export_prospects(
     assigned_to_id: int | None = Query(None, alias="assignedToId"),
     state_id: int | None = Query(None, alias="stateId"),
     branch_id: int | None = Query(None, alias="branchId"),
+    branch_ids: str | None = Query(None, alias="branchIds", description="CSV e.g. 1,2,3"),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -519,11 +548,14 @@ def export_prospects(
     ):
         assigned_to_id = None
 
-    from app.core.geo_scope import merge_geo_query_params
+    from app.core.geo_scope import merge_geo_query_params, parse_branch_ids
 
-    state_id, branch_id = merge_geo_query_params(
-        current_user, state_id, branch_id
+    geo = merge_geo_query_params(
+        current_user, state_id, branch_id, parse_branch_ids(branch_ids)
     )
+    state_id = geo.state_id
+    branch_id = geo.branch_id
+    branch_ids = geo.normalized_branch_ids()
 
     try:
         stage_filter = _parse_admission_stage_filters(
@@ -537,6 +569,7 @@ def export_prospects(
             assigned_to_id=assigned_to_id,
             state_id=state_id,
             branch_id=branch_id,
+            branch_ids=branch_ids,
             course_id=course_id,
             current_user=current_user,
         )
@@ -655,7 +688,7 @@ async def update_prospect(
 
     try:
         existing = ProspectService.get(db, prospect_id)
-        _ensure_prospect_access(existing, current_user)
+        _ensure_prospect_editable(existing, current_user)
 
         if "multipart/form-data" in content_type:
             form = await request.form()
@@ -772,7 +805,7 @@ async def upload_prospect_document(
         )
     try:
         prospect = ProspectService.get(db, prospect_id)
-        _ensure_prospect_access(prospect, current_user)
+        _ensure_prospect_editable(prospect, current_user)
     except ValueError as ex:
         raise HTTPException(status_code=404, detail=str(ex))
 
@@ -860,7 +893,7 @@ async def upload_lead_document(
         )
     try:
         prospect = ProspectService.get(db, prospect_id)
-        _ensure_prospect_access(prospect, current_user)
+        _ensure_prospect_editable(prospect, current_user)
     except ValueError as ex:
         raise HTTPException(status_code=404, detail=str(ex))
 
@@ -1025,7 +1058,7 @@ async def add_lead_payment(
 
     try:
         prospect = ProspectService.get(db, prospect_id)
-        _ensure_prospect_access(prospect, current_user)
+        _ensure_prospect_editable(prospect, current_user)
     except ValueError as ex:
         raise HTTPException(status_code=404, detail=str(ex))
 
@@ -1132,7 +1165,7 @@ def delete_prospect(
     deny_if_cannot_mutate_leads(current_user)
     try:
         prospect = ProspectService.get(db, prospect_id)
-        _ensure_prospect_access(prospect, current_user)
+        _ensure_prospect_editable(prospect, current_user)
         ProspectService.delete(
             db,
             prospect_id,
@@ -1152,7 +1185,7 @@ def update_stage(
     deny_if_cannot_mutate_leads(current_user)
     try:
         prospect = ProspectService.get(db, prospect_id)
-        _ensure_prospect_access(prospect, current_user)
+        _ensure_prospect_editable(prospect, current_user)
         result = ProspectService.change_stage(
             db,
             prospect_id,
@@ -1209,7 +1242,7 @@ def update_admission_stage(
 
     try:
         prospect = ProspectService.get(db, prospect_id)
-        _ensure_prospect_access(prospect, current_user)
+        _ensure_prospect_editable(prospect, current_user)
         result = ProspectService.change_admission_stage(
             db,
             prospect_id,
@@ -1273,7 +1306,7 @@ def update_exam(
         )
     try:
         prospect = ProspectService.get(db, prospect_id)
-        _ensure_prospect_access(prospect, current_user)
+        _ensure_prospect_editable(prospect, current_user)
         result = ProspectService.update_exam(
             db,
             prospect_id,

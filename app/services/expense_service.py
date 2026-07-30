@@ -161,6 +161,7 @@ class ExpenseService:
         employee_id: int | None = None,
         state_id: int | None = None,
         branch_id: int | None = None,
+        branch_ids: list[int] | None = None,
     ) -> dict:
         """Scoped by stored + related-user geo when stateId/branchId apply."""
         skip = (page - 1) * page_size
@@ -174,11 +175,94 @@ class ExpenseService:
             employee_id=employee_id,
             state_id=state_id,
             branch_id=branch_id,
+            branch_ids=branch_ids,
         )
         return {
             "total": total,
             "items": [self._to_response(item) for item in items],
         }
+
+    def export(
+        self,
+        *,
+        date_from=None,
+        date_to=None,
+        search: str | None = None,
+        expense_type: ExpenseCategory | None = None,
+        employee_id: int | None = None,
+        state_id: int | None = None,
+        branch_id: int | None = None,
+        branch_ids: list[int] | None = None,
+        fmt: str = "xlsx",
+    ):
+        from app.services.export_service import ExportService
+
+        fmt = (fmt or "xlsx").lower().strip()
+        if fmt not in ("xlsx", "csv"):
+            raise ValueError("Unsupported format. Use xlsx or csv.")
+
+        items = self.repo.list_for_export(
+            date_from=date_from,
+            date_to=date_to,
+            search=search,
+            expense_type=expense_type,
+            employee_id=employee_id,
+            state_id=state_id,
+            branch_id=branch_id,
+            branch_ids=branch_ids,
+        )
+
+        headers = [
+            "Expense ID",
+            "Date",
+            "Type",
+            "Description",
+            "Amount",
+            "Paid To",
+            "Transaction ID",
+            "Installment",
+            "Employee",
+            "State",
+            "Branch",
+            "Requested By",
+            "Created By",
+            "Approved By",
+            "Verified By",
+            "Receipt URL",
+            "Invoice URL",
+            "Created At",
+        ]
+        rows = []
+        for e in items:
+            rows.append(
+                [
+                    e.expense_id,
+                    e.expense_date.isoformat() if e.expense_date else "",
+                    e.expense_type.value
+                    if hasattr(e.expense_type, "value")
+                    else e.expense_type,
+                    e.description,
+                    float(e.amount) if e.amount is not None else "",
+                    e.paid_to,
+                    e.transaction_id or "",
+                    e.installment_number or "",
+                    self._user_name(e.employee) or "",
+                    e.state.name if e.state else "",
+                    e.branch.name if e.branch else "",
+                    self._user_name(e.requester) or "",
+                    self._user_name(e.creator) or "",
+                    self._user_name(e.approver) or "",
+                    self._user_name(e.verifier) or "",
+                    ExportService._absolute_file_url(e.receipt_url),
+                    ExportService._absolute_file_url(e.invoice_url),
+                    e.created_at.isoformat() if e.created_at else "",
+                ]
+            )
+
+        filename = "expenses_export.xlsx" if fmt == "xlsx" else "expenses_export.csv"
+        if fmt == "csv":
+            return ExportService._to_csv(headers, rows, filename)
+        return ExportService._to_xlsx(headers, rows, filename, "Expenses")
 
     def update(
         self,

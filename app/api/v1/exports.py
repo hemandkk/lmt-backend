@@ -30,6 +30,7 @@ def export_data(
     employee_id: Optional[int] = Query(None, alias="employeeId"),
     state_id: Optional[int] = Query(None, alias="stateId"),
     branch_id: Optional[int] = Query(None, alias="branchId"),
+    branch_ids: Optional[str] = Query(None, alias="branchIds", description="CSV e.g. 1,2,3"),
     stage: Optional[str] = None,
     source: Optional[str] = None,
     db: Session = Depends(get_db),
@@ -43,11 +44,14 @@ def export_data(
     is_admin_user = current_user.role == UserRole.admin
     scoped_employee_id = resolve_employee_scope(current_user, employee_id)
 
-    from app.core.geo_scope import merge_geo_query_params
+    from app.core.geo_scope import merge_geo_query_params, parse_branch_ids
 
-    state_id, branch_id = merge_geo_query_params(
-        current_user, state_id, branch_id
+    geo = merge_geo_query_params(
+        current_user, state_id, branch_id, parse_branch_ids(branch_ids)
     )
+    state_id = geo.state_id
+    branch_id = geo.branch_id
+    branch_ids = geo.normalized_branch_ids()
 
     # Admin "all" exports keep employee_id=None; employees always get self
     export_employee_id = scoped_employee_id
@@ -64,6 +68,7 @@ def export_data(
             employee_id=export_employee_id,
             state_id=state_id,
             branch_id=branch_id,
+            branch_ids=branch_ids,
             stage=stage,
             source=source,
             current_user_id=current_user.id,

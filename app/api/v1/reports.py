@@ -95,6 +95,7 @@ def admin_report(
     employee_id: Optional[int] = Query(None, alias="employeeId"),
     state_id: Optional[int] = Query(None, alias="stateId"),
     branch_id: Optional[int] = Query(None, alias="branchId"),
+    branch_ids: Optional[str] = Query(None, alias="branchIds", description="CSV e.g. 1,2,3"),
     stage: Optional[str] = None,
     source: Optional[str] = None,
     db: Session = Depends(get_db),
@@ -123,6 +124,7 @@ def revenue_report(
     employee_id: Optional[int] = Query(None, alias="employeeId"),
     state_id: Optional[int] = Query(None, alias="stateId"),
     branch_id: Optional[int] = Query(None, alias="branchId"),
+    branch_ids: Optional[str] = Query(None, alias="branchIds", description="CSV e.g. 1,2,3"),
     db: Session = Depends(get_db),
     current_user: User = Depends(require_admin),
 ):
@@ -147,6 +149,7 @@ def employee_performance_report(
     employee_id: Optional[int] = Query(None, alias="employeeId"),
     state_id: Optional[int] = Query(None, alias="stateId"),
     branch_id: Optional[int] = Query(None, alias="branchId"),
+    branch_ids: Optional[str] = Query(None, alias="branchIds", description="CSV e.g. 1,2,3"),
     stage: Optional[str] = None,
     source: Optional[str] = None,
     db: Session = Depends(get_db),
@@ -175,6 +178,7 @@ def leads_by_stage_report(
     employee_id: Optional[int] = Query(None, alias="employeeId"),
     state_id: Optional[int] = Query(None, alias="stateId"),
     branch_id: Optional[int] = Query(None, alias="branchId"),
+    branch_ids: Optional[str] = Query(None, alias="branchIds", description="CSV e.g. 1,2,3"),
     source: Optional[str] = None,
     db: Session = Depends(get_db),
     current_user: User = Depends(require_admin),
@@ -201,6 +205,7 @@ def leads_by_admission_stage_report(
     employee_id: Optional[int] = Query(None, alias="employeeId"),
     state_id: Optional[int] = Query(None, alias="stateId"),
     branch_id: Optional[int] = Query(None, alias="branchId"),
+    branch_ids: Optional[str] = Query(None, alias="branchIds", description="CSV e.g. 1,2,3"),
     source: Optional[str] = None,
     db: Session = Depends(get_db),
     current_user: User = Depends(require_admin),
@@ -230,6 +235,7 @@ def incentives_report(
     ),
     state_id: Optional[int] = Query(None, alias="stateId"),
     branch_id: Optional[int] = Query(None, alias="branchId"),
+    branch_ids: Optional[str] = Query(None, alias="branchIds", description="CSV e.g. 1,2,3"),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -239,11 +245,14 @@ def incentives_report(
     - Admin: all employees, or ?employeeId= / stateId / branchId
     """
     scoped_employee_id = resolve_employee_scope(current_user, employee_id)
-    from app.core.geo_scope import merge_geo_query_params
+    from app.core.geo_scope import merge_geo_query_params, parse_branch_ids
 
-    state_id, branch_id = merge_geo_query_params(
-        current_user, state_id, branch_id
+    geo = merge_geo_query_params(
+        current_user, state_id, branch_id, parse_branch_ids(branch_ids)
     )
+    state_id = geo.state_id
+    branch_id = geo.branch_id
+    branch_ids = geo.normalized_branch_ids()
     try:
         return ReportService.incentive_report(
             db,
@@ -251,6 +260,7 @@ def incentives_report(
             employee_id=scoped_employee_id,
             state_id=state_id,
             branch_id=branch_id,
+            branch_ids=branch_ids,
         )
     except ValueError as ex:
         raise HTTPException(status_code=400, detail=str(ex)) from ex
@@ -282,7 +292,10 @@ def incentive_releases_report(
     scoped_employee_id = resolve_employee_scope(current_user, employee_id)
     from app.core.geo_scope import merge_geo_query_params
 
-    state_id, branch_id = merge_geo_query_params(current_user)
+    geo = merge_geo_query_params(current_user)
+    state_id = geo.state_id
+    branch_id = geo.branch_id
+    branch_ids = geo.normalized_branch_ids()
     try:
         return IncentiveReleaseService.incentive_release_report(
             db,

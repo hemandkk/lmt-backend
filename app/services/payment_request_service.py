@@ -127,6 +127,7 @@ class PaymentRequestService:
         search: str | None = None,
         state_id: int | None = None,
         branch_id: int | None = None,
+        branch_ids: list[int] | None = None,
     ) -> dict:
         """Scoped by stored + related-user geo when stateId/branchId apply."""
         skip = (page - 1) * page_size
@@ -139,6 +140,7 @@ class PaymentRequestService:
             search=search,
             state_id=state_id,
             branch_id=branch_id,
+            branch_ids=branch_ids,
         )
         return {
             "total": total,

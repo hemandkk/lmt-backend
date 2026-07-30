@@ -50,6 +50,7 @@ class PaymentRequestRepository:
         search: str | None = None,
         state_id: int | None = None,
         branch_id: int | None = None,
+        branch_ids: list[int] | None = None,
     ) -> tuple[int, list[PaymentRequest]]:
         from app.core.geo_scope import apply_entity_geo_filter
 
@@ -99,6 +100,7 @@ class PaymentRequestRepository:
             ),
             state_id=state_id,
             branch_id=branch_id,
+            branch_ids=branch_ids,
         )
 
         total = query.count()

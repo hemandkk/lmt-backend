@@ -146,7 +146,7 @@ def is_team_supervisor(user: User) -> bool:
 
 
 def is_sales_user(user: User) -> bool:
-    """Employee / manager / sales_head — own-lead CRM scope."""
+    """Employee / manager / sales_head (sales CRM roles)."""
     return user.role in SALES_ROLES
 
 
@@ -279,8 +279,14 @@ def visible_admission_stages_for_role(
 
 
 def prospect_visible_to_user(prospect, user: User) -> bool:
+    """Whether the user may view this prospect."""
     if is_admin(user):
         return True
+    if is_sales_head(user):
+        # View all admissions whose assignee is in the sales head's branches
+        from app.core.geo_scope import assignee_in_geo_scope
+
+        return assignee_in_geo_scope(prospect, user)
     if is_sales_user(user):
         return prospect.assigned_to_id == user.id
     if can_view_all_leads(user):
@@ -288,6 +294,24 @@ def prospect_visible_to_user(prospect, user: User) -> bool:
 
         return assignee_in_geo_scope(prospect, user)
 
+    return False
+
+
+def prospect_editable_by_user(prospect, user: User) -> bool:
+    """
+    Whether the user may mutate this prospect (edit, payments, docs, etc.).
+    Sales head may view branch-wide leads but only edit their own.
+    """
+    if is_admin(user):
+        return True
+    if is_sales_head(user):
+        return prospect.assigned_to_id == user.id
+    if is_sales_user(user):
+        return prospect.assigned_to_id == user.id
+    if can_view_all_leads(user):
+        from app.core.geo_scope import assignee_in_geo_scope
+
+        return assignee_in_geo_scope(prospect, user)
     return False
 
 

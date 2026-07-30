@@ -36,6 +36,11 @@ class EmployeeCreate(BaseModel):
     )
     state_id: Optional[int] = Field(default=None, alias="stateId")
     branch_id: Optional[int] = Field(default=None, alias="branchId")
+    branch_ids: Optional[list[int]] = Field(
+        default=None,
+        alias="branchIds",
+        description="Required for sales_head: one or more branch IDs in the state",
+    )
 
     @field_validator("role", mode="before")
     @classmethod
@@ -57,6 +62,18 @@ class EmployeeCreate(BaseModel):
     def empty_supervisor_to_none(cls, value: Any) -> Any:
         if value == "" or value is None:
             return None
+        return value
+
+    @field_validator("branch_ids", mode="before")
+    @classmethod
+    def coerce_branch_ids(cls, value: Any) -> Any:
+        if value is None or value == "":
+            return None
+        if isinstance(value, str):
+            parts = [p.strip() for p in value.split(",") if p.strip()]
+            return [int(p) for p in parts] or None
+        if isinstance(value, (list, tuple)):
+            return [int(x) for x in value] or None
         return value
 
 
@@ -88,6 +105,11 @@ class EmployeeUpdate(BaseModel):
     )
     state_id: Optional[int] = Field(default=None, alias="stateId")
     branch_id: Optional[int] = Field(default=None, alias="branchId")
+    branch_ids: Optional[list[int]] = Field(
+        default=None,
+        alias="branchIds",
+        description="For sales_head: replace assigned branches (one or more)",
+    )
 
     @field_validator("role", mode="before")
     @classmethod
@@ -110,6 +132,27 @@ class EmployeeUpdate(BaseModel):
         if value == "":
             return None
         return value
+
+    @field_validator("branch_ids", mode="before")
+    @classmethod
+    def coerce_branch_ids(cls, value: Any) -> Any:
+        if value is None or value == "":
+            return None
+        if isinstance(value, str):
+            parts = [p.strip() for p in value.split(",") if p.strip()]
+            return [int(p) for p in parts] or None
+        if isinstance(value, (list, tuple)):
+            return [int(x) for x in value] or None
+        return value
+
+
+class EmployeeBranchItem(BaseModel):
+    model_config = _alias_config()
+
+    id: int
+    name: str
+    branch_code: str = Field(serialization_alias="branchCode")
+    state_id: int = Field(serialization_alias="stateId")
 
 
 class EmployeeResponse(BaseModel):
@@ -161,6 +204,10 @@ class EmployeeResponse(BaseModel):
     branch_code: Optional[str] = Field(
         default=None, serialization_alias="branchCode"
     )
+    branch_ids: list[int] = Field(
+        default_factory=list, serialization_alias="branchIds"
+    )
+    branches: list[EmployeeBranchItem] = Field(default_factory=list)
     last_login: Optional[datetime] = Field(
         default=None, serialization_alias="lastLogin"
     )

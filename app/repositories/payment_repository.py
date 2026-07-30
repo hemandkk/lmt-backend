@@ -53,6 +53,7 @@ class PaymentRepository:
         assigned_to_id: int | None = None,
         state_id: int | None = None,
         branch_id: int | None = None,
+        branch_ids: list[int] | None = None,
         prospect_id: int | None = None,
         admission_stages: list[str] | None = None,
         date_from=None,
@@ -71,7 +72,7 @@ class PaymentRepository:
             query = query.filter(Prospect.assigned_to_id == assigned_to_id)
 
         query = apply_prospect_assignee_geo(
-            query, state_id=state_id, branch_id=branch_id
+            query, state_id=state_id, branch_id=branch_id, branch_ids=branch_ids
         )
 
         if prospect_id is not None:
@@ -135,6 +136,7 @@ class PaymentRepository:
         assigned_to_id: int | None = None,
         state_id: int | None = None,
         branch_id: int | None = None,
+        branch_ids: list[int] | None = None,
         prospect_id: int | None = None,
         date_from=None,
         date_to=None,
@@ -149,7 +151,7 @@ class PaymentRepository:
         if assigned_to_id is not None:
             query = query.filter(Prospect.assigned_to_id == assigned_to_id)
         query = apply_prospect_assignee_geo(
-            query, state_id=state_id, branch_id=branch_id
+            query, state_id=state_id, branch_id=branch_id, branch_ids=branch_ids
         )
         if prospect_id is not None:
             query = query.filter(Payment.prospect_id == prospect_id)

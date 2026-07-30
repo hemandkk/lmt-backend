@@ -34,11 +34,21 @@ def require_admin(
         )
     return current_user
 
-
-def require_admin_or_accountant(
+def require_admin_or_sales_head(
     current_user: User = Depends(get_current_user),
 ) -> User:
-    if current_user.role not in (UserRole.admin, UserRole.accountant):
+    if current_user.role not in (UserRole.admin, UserRole.accountant, UserRole.sales_head):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Admin or sales head access required.",
+        )
+    return current_user
+
+
+def require_admin_or_accountant_or_sales_head(
+    current_user: User = Depends(get_current_user),
+) -> User:
+    if current_user.role not in (UserRole.admin, UserRole.accountant, UserRole.sales_head):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Admin or accountant access required.",
@@ -142,10 +152,15 @@ def resolve_employee_scope(
     """
     Resolve which employee_id to filter by.
 
-    - Sales roles (employee/manager/sales_head): always forced to their own id.
+    - Employee / manager: always forced to their own id.
+    - Sales head: no assignee lock (geo/branch scope applies elsewhere).
     - Admin: None = all users; or requested_employee_id if provided.
     - Accountant / processing_team: no assignee scope (admission filters apply).
     """
+    from app.core.roles import is_sales_head
+
+    if is_sales_head(current_user):
+        return None
     if is_sales_user(current_user):
         return current_user.id
 
@@ -177,6 +192,26 @@ def ensure_prospect_access(
     raise HTTPException(
         status_code=status.HTTP_403_FORBIDDEN,
         detail="You do not have access to this prospect.",
+    )
+
+
+def ensure_prospect_editable(
+    db: Session,
+    prospect_id: int,
+    current_user: User,
+):
+    """View access plus mutate permission (sales_head: own leads only)."""
+    from app.core.roles import prospect_editable_by_user
+
+    prospect = ensure_prospect_access(db, prospect_id, current_user)
+    if prospect_editable_by_user(prospect, current_user):
+        return prospect
+    raise HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail=(
+            "You can view this admission but cannot edit it. "
+            "Only leads assigned to you may be modified."
+        ),
     )
 
 
