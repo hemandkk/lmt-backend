@@ -56,7 +56,8 @@ def _resolve_slab_rate(slabs: list, admission_count: int) -> Decimal:
 
 def _get_completed_stages() -> list[str]:
     """Admission stages considered as 'completed' for incentive purposes."""
-    return [AdmissionStage.completed.value, AdmissionStage.delivered.value]
+    #return [AdmissionStage.completed.value, AdmissionStage.delivered.value]
+    return [AdmissionStage.completed.value]
 
 
 def _compute_employee_monthly(
@@ -123,8 +124,11 @@ def _compute_employee_monthly(
                 Prospect.updated_at <= report_cutoff,
             ).scalar() or 0
         )
+        # Payable incentive based on completed admissions (created in this month, currently completed, updated_at <= report cutoff)
 
-        receivable_incentive = Decimal(str(completed_count)) * slab_rate
+        payable_slab_rate = _resolve_slab_rate(slabs, completed_count)
+
+        receivable_incentive = Decimal(str(completed_count)) * payable_slab_rate
 
         monthly_items.append(IncentiveReleaseMonthItem(
             month=month_label,
