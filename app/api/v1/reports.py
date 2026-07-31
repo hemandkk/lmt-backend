@@ -291,12 +291,13 @@ def incentive_releases_report(
 ):
     """
     Incentive release report — monthly breakdown of admissions, booked/receivable incentives.
-    - Employee / manager: own incentive releases only
-    - Sales head: branch-team breakdown (employee + manager + sales_head in scope)
+    - Employee / manager / sales_head: own incentive releases only
     - Admin with ?employeeId=: single person view
     - Admin without ?employeeId=: all sales roles (employee, manager, sales_head)
     """
     scoped_employee_id = resolve_employee_scope(current_user, employee_id)
+    if current_user.role.value == "sales_head":
+        scoped_employee_id = current_user.id
     from app.core.geo_scope import merge_geo_query_params
 
     geo = merge_geo_query_params(current_user)
