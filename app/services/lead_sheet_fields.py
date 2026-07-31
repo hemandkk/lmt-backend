@@ -155,9 +155,9 @@ def build_lead_sync_fields(
 
 EXTRA_SYNC_HEADERS = [
     "Admission Owner",
-    "Follow-up Date",
-    "Next Follow-up",
-    "Current Admission Stage",
+    #"Follow-up Date",
+    #"Next Follow-up",
+    #"Current Admission Stage",
     "Admission Stage",
     "Last Activity",
     "Last Updated By",
@@ -184,9 +184,9 @@ EXTRA_SYNC_HEADERS = [
 def extra_sync_values(fields: dict[str, str]) -> list[str]:
     return [
         fields.get("lead_owner", ""),
-        fields.get("follow_up_date", ""),
-        fields.get("next_follow_up", ""),
-        fields.get("current_lead_stage", ""),
+        #fields.get("follow_up_date", ""),
+        #fields.get("next_follow_up", ""),
+        #fields.get("current_lead_stage", ""),
         fields.get("admission_stage", ""),
         fields.get("last_activity", ""),
         fields.get("last_updated_by", ""),
