@@ -29,7 +29,7 @@ LEAD_ID_COLUMN_INDEX = 1  # 0-based within the row values
 
 SHEET_HEADERS = [
     "Date",
-    "Lead ID",
+    "Admission ID",
     "Name",
     "Email",
     "Phone Number",
@@ -169,7 +169,7 @@ class GoogleSheetsService:
             )
             .execute()
         )
-        target = (settings.GOOGLE_SHEETS_WORKSHEET_NAME or "Leads").strip()
+        target = (settings.GOOGLE_SHEETS_WORKSHEET_NAME or "Admissions").strip()
         for sheet in meta.get("sheets") or []:
             props = sheet.get("properties") or {}
             if props.get("title") == target:
@@ -510,7 +510,7 @@ class GoogleSheetsService:
                 if attempt < attempts:
                     time.sleep(backoff * attempt)
         raise GoogleSheetsSyncError(
-            f"Failed to remove lead {lead_id} from Google Sheets: {last_error}"
+            f"Failed to remove Admission {lead_id} from Google Sheets: {last_error}"
         )
 
     @staticmethod
@@ -570,7 +570,7 @@ class GoogleSheetsService:
                 time.sleep(backoff * attempt)
 
         raise GoogleSheetsSyncError(
-            f"Failed to sync lead to Google Sheets after {attempts} attempts: "
+            f"Failed to sync Admission to Google Sheets after {attempts} attempts: "
             f"{last_error}"
         )
 
@@ -624,7 +624,7 @@ class GoogleSheetsService:
                 entity_type="prospect",
                 entity_id=prospect.id,
                 description=(
-                    f"Lead {prospect.prospect_id} synced to Google Sheets "
+                    f"Admission {prospect.prospect_id} synced to Google Sheets "
                     f"({updated_range or 'ok'})."
                 ),
                 user_id=actor_id,
@@ -632,7 +632,7 @@ class GoogleSheetsService:
                 meta_data=json.dumps({"updatedRange": updated_range}),
             )
             logger.info(
-                "Synced lead %s to Google Sheets (%s).",
+                "Synced Admission %s to Google Sheets (%s).",
                 prospect.prospect_id,
                 updated_range,
             )
@@ -660,14 +660,14 @@ class GoogleSheetsService:
                 entity_type="prospect",
                 entity_id=prospect.id,
                 description=(
-                    f"Lead {prospect.prospect_id} Google Sheets sync failed: {ex}"
+                    f"Admission {prospect.prospect_id} Google Sheets sync failed: {ex}"
                 ),
                 user_id=actor_id,
                 prospect_id=prospect.id,
                 meta_data=json.dumps({"error": str(ex)}),
             )
             logger.exception(
-                "Google Sheets sync failed for lead %s",
+                "Google Sheets sync failed for Admission %s",
                 prospect.prospect_id,
             )
 
@@ -731,7 +731,7 @@ class GoogleSheetsService:
                 entity_type="prospect",
                 entity_id=prospect_pk,
                 description=(
-                    f"Lead {prospect_code} cleared from Google Sheets"
+                    f"Admission {prospect_code} cleared from Google Sheets"
                     + (f" ({cleared})" if cleared else " (row not found).")
                 ),
                 user_id=actor_id,
@@ -744,12 +744,12 @@ class GoogleSheetsService:
                 entity_type="prospect",
                 entity_id=prospect_pk,
                 description=(
-                    f"Lead {prospect_code} Google Sheets delete failed: {ex}"
+                    f"Admission {prospect_code} Google Sheets delete failed: {ex}"
                 ),
                 user_id=actor_id,
                 prospect_id=prospect_pk,
                 meta_data=json.dumps({"error": str(ex)}),
             )
             logger.exception(
-                "Google Sheets delete failed for lead %s", prospect_code
+                "Google Sheets delete failed for Admission %s", prospect_code
             )

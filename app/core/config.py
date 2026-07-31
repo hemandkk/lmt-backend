@@ -39,7 +39,7 @@ class Settings(BaseSettings):
     # Google Sheets
     GOOGLE_SHEETS_ENABLED: bool = Field(default=False)
     GOOGLE_SHEETS_SPREADSHEET_ID: str | None = Field(default=None)
-    GOOGLE_SHEETS_WORKSHEET_NAME: str = Field(default="Leads")
+    GOOGLE_SHEETS_WORKSHEET_NAME: str = Field(default="Admissions")
     GOOGLE_SERVICE_ACCOUNT_FILE: str | None = Field(
         default=None,
         description="Path to service account JSON key file",

@@ -704,7 +704,7 @@ async def update_prospect(
             ):
                 raise HTTPException(
                     status_code=403,
-                    detail="You cannot reassign leads.",
+                    detail="You cannot reassign Admission.",
                 )
             result = ProspectService.update(
                 db,
@@ -727,7 +727,7 @@ async def update_prospect(
         ):
             raise HTTPException(
                 status_code=403,
-                detail="You cannot reassign leads.",
+                detail="You cannot reassign Admission.",
             )
         result = ProspectService.update(
             db, prospect_id, payload, actor_id=actor_id

@@ -154,10 +154,10 @@ def build_lead_sync_fields(
 
 
 EXTRA_SYNC_HEADERS = [
-    "Lead Owner",
+    "Admission Owner",
     "Follow-up Date",
     "Next Follow-up",
-    "Current Lead Stage",
+    "Current Admission Stage",
     "Admission Stage",
     "Last Activity",
     "Last Updated By",

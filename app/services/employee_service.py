@@ -657,8 +657,8 @@ class EmployeeService:
         if lead_count > 0:
             if transfer_to_id is None:
                 raise ValueError(
-                    f"Employee has {lead_count} lead(s) assigned. "
-                    "Please transfer all leads before deactivating, "
+                    f"Employee has {lead_count} Admission(s) assigned. "
+                    "Please transfer all Admission before deactivating, "
                     "or provide a transferToId to auto-transfer."
                 )
             target = UserRepository.get_by_id(db, transfer_to_id)
@@ -667,7 +667,7 @@ class EmployeeService:
                     "transferToId must be an active employee."
                 )
             if transfer_to_id == employee_id:
-                raise ValueError("Cannot transfer leads to the same employee.")
+                raise ValueError("Cannot transfer Admission to the same employee.")
 
             # Bulk-transfer all leads
             transferred_ids = [
@@ -689,7 +689,7 @@ class EmployeeService:
                 entity_type="user",
                 entity_id=user.id,
                 description=(
-                    f"All {lead_count} lead(s) transferred from "
+                    f"All {lead_count} Admission(s) transferred from "
                     f"{user.employee_id} to {target.employee_id} "
                     f"before deactivation"
                 ),
@@ -745,8 +745,8 @@ class EmployeeService:
 
         if lead_count > 0:
             raise ValueError(
-                f"Employee has {lead_count} lead(s) assigned. "
-                "Please transfer all leads before deactivating."
+                f"Employee has {lead_count} Admission(s) assigned. "
+                "Please transfer all Admissions before deactivating."
             )
 
         user.is_active = False

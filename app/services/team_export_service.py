@@ -135,7 +135,7 @@ class TeamExportService:
             rows = [
                 ["Total Revenue", float(data["total_revenue"])],
                 ["Total Admissions", data["total_admissions"]],
-                ["Leads Converted", data["leads_converted"]],
+                ["Admissions Converted", data["leads_converted"]],
                 ["Conversion Rate %", data["conversion_rate"]],
             ]
             for m in data["monthly"]:
@@ -169,15 +169,15 @@ class TeamExportService:
                 ["Collected This Month", c.get("thisMonth")],
                 ["Collected Total", c.get("total")],
                 [
-                    "Advanced Paid Leads",
+                    "Advanced Paid Admissions",
                     data["lead_payment_status"].get("advancedPaid"),
                 ],
                 [
-                    "50% Paid Leads",
+                    "50% Paid Admissions",
                     data["lead_payment_status"].get("fiftyPercentPaid"),
                 ],
                 [
-                    "100% Paid Leads",
+                    "100% Paid Admissions",
                     data["lead_payment_status"].get("hundredPercentPaid"),
                 ],
             ]

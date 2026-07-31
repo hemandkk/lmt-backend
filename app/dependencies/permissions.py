@@ -74,7 +74,7 @@ def require_lead_mutator(
     if not can_mutate_leads(current_user):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="You do not have permission to modify leads.",
+            detail="You do not have permission to modify Admission.",
         )
     return current_user
 
@@ -210,7 +210,7 @@ def ensure_prospect_editable(
         status_code=status.HTTP_403_FORBIDDEN,
         detail=(
             "You can view this admission but cannot edit it. "
-            "Only leads assigned to you may be modified."
+            "Only Admission assigned to you may be modified."
         ),
     )
 
@@ -240,7 +240,7 @@ def deny_if_cannot_mutate_leads(current_user: User) -> None:
     if not can_mutate_leads(current_user):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="You do not have permission to modify leads.",
+            detail="You do not have permission to modify Admission.",
         )
 
 
@@ -267,7 +267,7 @@ def require_lead_viewer(
     if not (is_admin(current_user) or is_sales_user(current_user) or can_view_all_leads(current_user)):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="You do not have permission to view leads.",
+            detail="You do not have permission to view Admission.",
         )
     return current_user
 
@@ -279,6 +279,6 @@ def require_lead_editor(
     if not can_edit_lead(current_user):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="You do not have permission to edit leads.",
+            detail="You do not have permission to edit Admissions.",
         )
     return current_user

@@ -25,9 +25,9 @@ class NotificationService:
             user_id=prospect.assigned_to_id,
             prospect_id=prospect.id,
             type=NotificationType.lead_assigned,
-            title="New lead assigned",
+            title="New Admission assigned",
             message=(
-                f"Lead {prospect.prospect_id} ({prospect.name}) "
+                f"Admission {prospect.prospect_id} ({prospect.name}) "
                 f"has been assigned to you."
             ),
             is_read=False,
@@ -40,7 +40,7 @@ class NotificationService:
             entity_type="prospect",
             entity_id=prospect.id,
             description=(
-                f"Lead {prospect.prospect_id} assigned to user "
+                f"Admission {prospect.prospect_id} assigned to user "
                 f"{prospect.assigned_to_id}"
             ),
             user_id=actor_id,
@@ -62,9 +62,9 @@ class NotificationService:
                 user_id=prospect.assigned_to_id,
                 prospect_id=prospect.id,
                 type=NotificationType.stage_changed,
-                title="Lead stage updated",
+                title="Admission stage updated",
                 message=(
-                    f"Lead {prospect.prospect_id} ({prospect.name}) "
+                    f"Admission {prospect.prospect_id} ({prospect.name}) "
                     f"moved from {old_stage} to {new_stage}."
                 ),
                 is_read=False,
@@ -77,7 +77,7 @@ class NotificationService:
             entity_type="prospect",
             entity_id=prospect.id,
             description=(
-                f"Lead {prospect.prospect_id} stage changed "
+                f"Admission {prospect.prospect_id} stage changed "
                 f"from {old_stage} to {new_stage}"
             ),
             user_id=actor_id,
@@ -127,7 +127,7 @@ class NotificationService:
                     type=NotificationType.follow_up_reminder,
                     title="Follow-up reminder",
                     message=(
-                        f"Follow-up due for lead {prospect.prospect_id} "
+                        f"Follow-up due for Admission {prospect.prospect_id} "
                         f"({prospect.name}) on {prospect.follow_up_date}."
                     ),
                     is_read=False,

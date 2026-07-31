@@ -358,7 +358,7 @@ class ProspectService:
             action="lead_created",
             entity_type="prospect",
             entity_id=created.id,
-            description=f"Lead {created.prospect_id} ({created.name}) created",
+            description=f"Admission {created.prospect_id} ({created.name}) created",
             user_id=actor_id,
             prospect_id=created.id,
         )
@@ -493,7 +493,7 @@ class ProspectService:
             action="lead_updated",
             entity_type="prospect",
             entity_id=updated.id,
-            description=f"Lead {updated.prospect_id} updated",
+            description=f"Admission {updated.prospect_id} updated",
             user_id=actor_id,
             prospect_id=updated.id,
         )
@@ -557,7 +557,7 @@ class ProspectService:
             action="lead_deleted",
             entity_type="prospect",
             entity_id=prospect.id,
-            description=f"Lead {prospect.prospect_id} deleted",
+            description=f"Admission {prospect.prospect_id} deleted",
             user_id=actor_id,
             prospect_id=prospect.id,
         )
@@ -601,7 +601,7 @@ class ProspectService:
             entity_type="prospect",
             entity_id=updated.id,
             description=(
-                f"Lead {updated.prospect_id} assigned to "
+                f"Admission {updated.prospect_id} assigned to "
                 f"{assigned_to_id if assigned_to_id else 'unassigned'}"
                 + (f" (was {old_assigned})" if old_assigned else "")
             ),

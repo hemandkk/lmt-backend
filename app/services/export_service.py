@@ -313,8 +313,8 @@ class ExportService:
         return ExportService._to_xlsx(
             headers,
             rows,
-            "leads_export.xlsx",
-            "Leads",
+            "admissions_export.xlsx",
+            "Admissions",
         )
 
     @staticmethod
@@ -431,7 +431,7 @@ class ExportService:
                 ]
                 for p in prospects
             ]
-            return headers, rows, "Leads Export"
+            return headers, rows, "Admissions Export"
 
         if export_type == "employee_performance":
             data = AnalyticsRepository.employee_performance(
@@ -453,8 +453,8 @@ class ExportService:
                 "State Code",
                 "Branch",
                 "Branch Code",
-                "Leads Assigned",
-                "Leads Converted",
+                "Admissions Assigned",
+                "Admissions Converted",
                 "Revenue",
                 "Conversion Rate (%)",
             ]
@@ -509,7 +509,7 @@ class ExportService:
             headers = ["Metric", "Value"]
             rows = [
                 ["Total Employees", dash.total_employees],
-                ["Total Leads", dash.total_leads],
+                ["Total Admissions", dash.total_leads],
                 ["Total Revenue", float(dash.total_revenue)],
             ]
             for stage_item in dash.leads_by_stage:
@@ -527,13 +527,13 @@ class ExportService:
         dash = DashboardService.employee_dashboard(db, emp_id, date_from, date_to)
         headers = ["Metric", "Value"]
         rows = [
-            ["Leads Total", dash.lead_counts.total],
-            ["Leads Today", dash.lead_counts.today],
-            ["Leads This Week", dash.lead_counts.this_week],
-            ["Leads This Month", dash.lead_counts.this_month],
-            ["Advanced Paid Leads", dash.payment_status.advanced_paid],
-            ["50% Paid Leads", dash.payment_status.fifty_percent_paid],
-            ["100% Paid Leads", dash.payment_status.hundred_percent_paid],
+            ["Admissions Total", dash.lead_counts.total],
+            ["Admissions Today", dash.lead_counts.today],
+            ["Admissions This Week", dash.lead_counts.this_week],
+            ["Admissions This Month", dash.lead_counts.this_month],
+            ["Advanced Paid Admissions", dash.payment_status.advanced_paid],
+            ["50% Paid Admissions", dash.payment_status.fifty_percent_paid],
+            ["100% Paid Admissions", dash.payment_status.hundred_percent_paid],
             ["Collected Today", float(dash.payment_collected.today)],
             ["Collected This Week", float(dash.payment_collected.this_week)],
             ["Collected This Month", float(dash.payment_collected.this_month)],
