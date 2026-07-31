@@ -207,6 +207,8 @@ def _enrich_performance(
                 total_leads=row.get("total_leads", 0),
                 revenue=row.get("revenue", Decimal("0")),
                 conversion_rate=row.get("conversion_rate", 0.0),
+                total_admission=row.get("leads_assigned", 0),
+                total_completed=row.get("total_completed", 0),
                 target_achieved=(
                     Decimal(str(target["target_achieved"]))
                     if target
@@ -585,6 +587,8 @@ class ReportService:
                 employee_name=p.employee_name,
                 revenue=p.revenue,
                 deals=p.leads_converted,
+                total_admission=p.total_admission,
+                total_completed=p.total_completed,
                 target_achieved=p.target_achieved,
                 monthly_target=p.monthly_target,
                 target_status=p.target_status,
@@ -638,12 +642,14 @@ class ReportService:
         employee_id: Optional[int] = None,
         state_id: Optional[int] = None,
         branch_id: Optional[int] = None,
+        branch_ids: Optional[list[int]] = None,
     ) -> RevenueReportResponse:
         collected = AnalyticsRepository.payment_collected_summary(
             db,
             employee_id=employee_id,
             state_id=state_id,
             branch_id=branch_id,
+            branch_ids=branch_ids,
             custom_from=date_from,
             custom_to=date_to,
         )
@@ -662,6 +668,7 @@ class ReportService:
             employee_id=employee_id,
             state_id=state_id,
             branch_id=branch_id,
+            branch_ids=branch_ids,
         )
         enriched = _enrich_performance(
             db, performance, date_from=date_from, date_to=date_to
@@ -672,6 +679,7 @@ class ReportService:
                 employee_id=employee_id,
                 state_id=state_id,
                 branch_id=branch_id,
+                branch_ids=branch_ids,
                 date_from=date_from,
                 date_to=date_to,
             ),
@@ -691,6 +699,8 @@ class ReportService:
                     employee_name=p.employee_name,
                     revenue=p.revenue,
                     deals=p.leads_converted,
+                    total_admission=p.total_admission,
+                    total_completed=p.total_completed,
                     target_achieved=p.target_achieved,
                     monthly_target=p.monthly_target,
                     target_status=p.target_status,

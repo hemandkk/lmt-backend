@@ -15,7 +15,7 @@ from app.core.date_utils import (
 )
 from app.core.geo_scope import apply_prospect_assignee_geo, apply_user_geo_filter
 from app.db.models.payment import Payment, PaymentStatus
-from app.db.models.prospect import Prospect, ProspectStage
+from app.db.models.prospect import AdmissionStage, Prospect, ProspectStage
 from app.db.models.user import User, UserRole
 
 
@@ -494,6 +494,7 @@ class AnalyticsRepository:
         - leads_converted: those leads with ≥1 completed payment
         - revenue: still sum of completed payments (money)
         - total_leads: all-time lead count (ignores date filter)
+        - total_completed: leads with admission_stage == completed
         """
         from sqlalchemy import and_
 
@@ -506,6 +507,9 @@ class AnalyticsRepository:
         )
         assigned = func.count(Prospect.id)
         revenue = func.coalesce(func.sum(paid_sq.c.paid_amount), 0)
+        total_completed = func.sum(
+            case((Prospect.admission_stage == AdmissionStage.completed, 1), else_=0)
+        )
 
         # All-time leads subquery (no date filter)
         total_leads_sq = (
@@ -542,6 +546,7 @@ class AnalyticsRepository:
                 func.coalesce(total_leads_sq.c.total_leads, 0).label(
                     "total_leads"
                 ),
+                func.coalesce(total_completed, 0).label("total_completed"),
             )
             .outerjoin(Prospect, join_cond)
             .outerjoin(paid_sq, paid_sq.c.prospect_id == Prospect.id)
@@ -593,6 +598,7 @@ class AnalyticsRepository:
                     "revenue": Decimal(row.revenue or 0),
                     "conversion_rate": round(rate, 2),
                     "total_leads": int(row.total_leads or 0),
+                    "total_completed": int(row.total_completed or 0),
                 }
             )
         return results

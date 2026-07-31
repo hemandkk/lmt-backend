@@ -4,6 +4,7 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
+from app.core.geo_scope import parse_branch_ids
 from app.db.models.user import User, UserRole
 from app.db.session import get_db
 from app.dependencies.auth import get_current_user
@@ -136,6 +137,7 @@ def revenue_report(
         employee_id=employee_id,
         state_id=state_id,
         branch_id=branch_id,
+        branch_ids=parse_branch_ids(branch_ids),
     )
 
 

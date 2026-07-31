@@ -182,6 +182,8 @@ class EmployeePerformanceItem(BaseModel):
     )
     exam_attended: int = Field(default=0, serialization_alias="examAttended")
     exam_certified: int = Field(default=0, serialization_alias="examCertified")
+    total_admission: int = Field(default=0, serialization_alias="totalAdmission")
+    total_completed: int = Field(default=0, serialization_alias="totalCompleted")
 
 
 class MonthlySalesItem(BaseModel):
@@ -281,6 +283,8 @@ class SalesByEmployeeItem(BaseModel):
     employee_name: str = Field(serialization_alias="employeeName")
     revenue: Decimal = Decimal("0")
     deals: int = 0
+    total_admission: int = Field(default=0, serialization_alias="totalAdmission")
+    total_completed: int = Field(default=0, serialization_alias="totalCompleted")
     target_achieved: Decimal = Field(
         default=Decimal("0"), serialization_alias="targetAchieved"
     )
