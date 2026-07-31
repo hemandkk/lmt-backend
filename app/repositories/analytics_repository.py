@@ -896,11 +896,13 @@ class AnalyticsRepository:
         state_id: Optional[int] = None,
         branch_id: Optional[int] = None,
         branch_ids: Optional[list[int]] = None,
+        roles: Optional[list] = None,
     ):
         from app.db.models.user import User, UserRole
 
+        role_filter = list(roles) if roles else [UserRole.employee]
         query = db.query(User).filter(
-            User.role == UserRole.employee,
+            User.role.in_(role_filter),
             User.is_active.is_(True),
         )
         if employee_id is not None:

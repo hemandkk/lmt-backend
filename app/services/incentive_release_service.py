@@ -220,12 +220,15 @@ class IncentiveReleaseService:
             result.employee_name = user.name if user else None
             return result
 
-        # All employees in geo scope (admin may pass None for nationwide)
+        # All sales roles in geo scope (admin may pass None for nationwide)
+        from app.core.roles import SALES_ROLES
+
         employees = AnalyticsRepository.list_active_employees(
             db,
             state_id=state_id,
             branch_id=branch_id,
             branch_ids=branch_ids,
+            roles=list(SALES_ROLES),
         )
         if not employees:
             return IncentiveReleaseListResponse(
