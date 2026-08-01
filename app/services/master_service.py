@@ -6,12 +6,16 @@ from sqlalchemy.orm import Session
 from app.core.id_generator import generate_next_code
 from app.db.models.branch import Branch
 from app.db.models.course import Course
+from app.db.models.department import Department
+from app.db.models.designation import Designation
 from app.db.models.incentive_slab import IncentiveSlab
 from app.db.models.specialization import Specialization
 from app.db.models.state import State
 from app.db.models.user import User, UserRole
 from app.repositories.branch_repository import BranchRepository
 from app.repositories.course_repository import CourseRepository
+from app.repositories.department_repository import DepartmentRepository
+from app.repositories.designation_repository import DesignationRepository
 from app.repositories.incentive_repository import IncentiveRepository
 from app.repositories.settings_repository import SettingsRepository
 from app.repositories.specialization_repository import SpecializationRepository
@@ -25,6 +29,10 @@ from app.schemas.master import (
     CourseCreate,
     CourseUpdate,
     DefaultSalesTargetResponse,
+    DepartmentCreate,
+    DepartmentUpdate,
+    DesignationCreate,
+    DesignationUpdate,
     EmployeeSalesTargetAssign,
     EmployeeSalesTargetItem,
     IncentiveSlabCreate,
@@ -261,6 +269,100 @@ class MasterService:
         if not specialization:
             raise ValueError("Specialization not found.")
         SpecializationRepository.delete(db, specialization)
+
+    # ==========================================================
+    # DESIGNATION (employee dropdown master)
+    # ==========================================================
+
+    @staticmethod
+    def get_designations(db: Session, *, active_only: bool = False):
+        return DesignationRepository.get_all(db, active_only=active_only)
+
+    @staticmethod
+    def create_designation(db: Session, payload: DesignationCreate):
+        existing = DesignationRepository.get_by_name(db, payload.name)
+        if existing:
+            raise ValueError("Designation already exists.")
+
+        designation = Designation(
+            name=payload.name,
+            is_active=payload.is_active,
+        )
+        return DesignationRepository.create(db, designation)
+
+    @staticmethod
+    def update_designation(
+        db: Session,
+        designation_id: int,
+        payload: DesignationUpdate,
+    ):
+        designation = DesignationRepository.get_by_id(db, designation_id)
+        if not designation:
+            raise ValueError("Designation not found.")
+
+        data = payload.model_dump(exclude_unset=True)
+        if "name" in data and data["name"]:
+            existing = DesignationRepository.get_by_name(db, data["name"])
+            if existing and existing.id != designation.id:
+                raise ValueError("Designation already exists.")
+
+        for key, value in data.items():
+            setattr(designation, key, value)
+        return DesignationRepository.update(db, designation)
+
+    @staticmethod
+    def delete_designation(db: Session, designation_id: int):
+        designation = DesignationRepository.get_by_id(db, designation_id)
+        if not designation:
+            raise ValueError("Designation not found.")
+        DesignationRepository.delete(db, designation)
+
+    # ==========================================================
+    # DEPARTMENT (employee dropdown master)
+    # ==========================================================
+
+    @staticmethod
+    def get_departments(db: Session, *, active_only: bool = False):
+        return DepartmentRepository.get_all(db, active_only=active_only)
+
+    @staticmethod
+    def create_department(db: Session, payload: DepartmentCreate):
+        existing = DepartmentRepository.get_by_name(db, payload.name)
+        if existing:
+            raise ValueError("Department already exists.")
+
+        department = Department(
+            name=payload.name,
+            is_active=payload.is_active,
+        )
+        return DepartmentRepository.create(db, department)
+
+    @staticmethod
+    def update_department(
+        db: Session,
+        department_id: int,
+        payload: DepartmentUpdate,
+    ):
+        department = DepartmentRepository.get_by_id(db, department_id)
+        if not department:
+            raise ValueError("Department not found.")
+
+        data = payload.model_dump(exclude_unset=True)
+        if "name" in data and data["name"]:
+            existing = DepartmentRepository.get_by_name(db, data["name"])
+            if existing and existing.id != department.id:
+                raise ValueError("Department already exists.")
+
+        for key, value in data.items():
+            setattr(department, key, value)
+        return DepartmentRepository.update(db, department)
+
+    @staticmethod
+    def delete_department(db: Session, department_id: int):
+        department = DepartmentRepository.get_by_id(db, department_id)
+        if not department:
+            raise ValueError("Department not found.")
+        DepartmentRepository.delete(db, department)
 
     @staticmethod
     async def import_specializations(

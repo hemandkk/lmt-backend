@@ -18,6 +18,8 @@ from app.db.models.expense import Expense
 from app.db.models.payment_request import PaymentRequest
 from app.db.models.state import State
 from app.db.models.branch import Branch
+from app.db.models.designation import Designation
+from app.db.models.department import Department
 
 
 from app.core.config import settings

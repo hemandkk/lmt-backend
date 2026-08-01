@@ -12,6 +12,8 @@ from app.db.models.activity_log import ActivityLog
 from app.db.models.app_setting import AppSetting
 from app.db.models.expense import Expense
 from app.db.models.payment_request import PaymentRequest
+from app.db.models.designation import Designation
+from app.db.models.department import Department
 
 __all__ = [
     "User",
@@ -28,4 +30,6 @@ __all__ = [
     "AppSetting",
     "Expense",
     "PaymentRequest",
+    "Designation",
+    "Department",
 ]

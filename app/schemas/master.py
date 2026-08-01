@@ -13,6 +13,62 @@ def _alias_config() -> ConfigDict:
 
 
 # ==========================================================
+# DESIGNATION (employee dropdown master — not FK-linked)
+# ==========================================================
+
+class DesignationCreate(BaseModel):
+    model_config = _alias_config()
+
+    name: str
+    is_active: bool = Field(default=True, alias="active")
+
+
+class DesignationUpdate(BaseModel):
+    model_config = _alias_config()
+
+    name: Optional[str] = None
+    is_active: Optional[bool] = Field(default=None, alias="active")
+
+
+class DesignationResponse(BaseModel):
+    model_config = _alias_config()
+
+    id: int
+    name: str
+    is_active: bool = Field(serialization_alias="active")
+    created_at: datetime = Field(serialization_alias="createdAt")
+    updated_at: datetime = Field(serialization_alias="updatedAt")
+
+
+# ==========================================================
+# DEPARTMENT (employee dropdown master — not FK-linked)
+# ==========================================================
+
+class DepartmentCreate(BaseModel):
+    model_config = _alias_config()
+
+    name: str
+    is_active: bool = Field(default=True, alias="active")
+
+
+class DepartmentUpdate(BaseModel):
+    model_config = _alias_config()
+
+    name: Optional[str] = None
+    is_active: Optional[bool] = Field(default=None, alias="active")
+
+
+class DepartmentResponse(BaseModel):
+    model_config = _alias_config()
+
+    id: int
+    name: str
+    is_active: bool = Field(serialization_alias="active")
+    created_at: datetime = Field(serialization_alias="createdAt")
+    updated_at: datetime = Field(serialization_alias="updatedAt")
+
+
+# ==========================================================
 # COURSE
 # ==========================================================
 

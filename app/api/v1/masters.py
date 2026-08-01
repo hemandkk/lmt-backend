@@ -26,6 +26,12 @@ from app.schemas.master import (
     CourseUpdate,
     DefaultSalesTargetResponse,
     DefaultSalesTargetUpdate,
+    DepartmentCreate,
+    DepartmentResponse,
+    DepartmentUpdate,
+    DesignationCreate,
+    DesignationResponse,
+    DesignationUpdate,
     EmployeeSalesTargetAssign,
     EmployeeSalesTargetItem,
     IncentiveSlabCreate,
@@ -218,6 +224,134 @@ def delete_specialization(
     except ValueError as ex:
         raise HTTPException(status_code=404, detail=str(ex)) from ex
     return {"message": "Specialization deleted."}
+
+
+# ==========================================================
+# Designations — employee dropdown master.
+# Read: all authenticated; write: admin.
+# ==========================================================
+
+@router.get(
+    "/designations",
+    response_model=list[DesignationResponse],
+)
+def get_designations(
+    active_only: bool = Query(False, alias="activeOnly"),
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    return MasterService.get_designations(db, active_only=active_only)
+
+
+@router.post(
+    "/designations",
+    response_model=DesignationResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+def create_designation(
+    payload: DesignationCreate,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_admin),
+):
+    try:
+        return MasterService.create_designation(db, payload)
+    except ValueError as ex:
+        raise HTTPException(status_code=400, detail=str(ex)) from ex
+
+
+@router.put(
+    "/designations/{designation_id}",
+    response_model=DesignationResponse,
+)
+def update_designation(
+    designation_id: int,
+    payload: DesignationUpdate,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_admin),
+):
+    try:
+        return MasterService.update_designation(db, designation_id, payload)
+    except ValueError as ex:
+        detail = str(ex)
+        code = 404 if detail == "Designation not found." else 400
+        raise HTTPException(status_code=code, detail=detail) from ex
+
+
+@router.delete("/designations/{designation_id}")
+def delete_designation(
+    designation_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_admin),
+):
+    try:
+        MasterService.delete_designation(db, designation_id)
+    except ValueError as ex:
+        raise HTTPException(status_code=404, detail=str(ex)) from ex
+    return {"message": "Designation deleted."}
+
+
+# ==========================================================
+# Departments — employee dropdown master.
+# Read: all authenticated; write: admin.
+# ==========================================================
+
+@router.get(
+    "/departments",
+    response_model=list[DepartmentResponse],
+)
+def get_departments(
+    active_only: bool = Query(False, alias="activeOnly"),
+    db: Session = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    return MasterService.get_departments(db, active_only=active_only)
+
+
+@router.post(
+    "/departments",
+    response_model=DepartmentResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+def create_department(
+    payload: DepartmentCreate,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_admin),
+):
+    try:
+        return MasterService.create_department(db, payload)
+    except ValueError as ex:
+        raise HTTPException(status_code=400, detail=str(ex)) from ex
+
+
+@router.put(
+    "/departments/{department_id}",
+    response_model=DepartmentResponse,
+)
+def update_department(
+    department_id: int,
+    payload: DepartmentUpdate,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_admin),
+):
+    try:
+        return MasterService.update_department(db, department_id, payload)
+    except ValueError as ex:
+        detail = str(ex)
+        code = 404 if detail == "Department not found." else 400
+        raise HTTPException(status_code=code, detail=detail) from ex
+
+
+@router.delete("/departments/{department_id}")
+def delete_department(
+    department_id: int,
+    db: Session = Depends(get_db),
+    user: User = Depends(require_admin),
+):
+    try:
+        MasterService.delete_department(db, department_id)
+    except ValueError as ex:
+        raise HTTPException(status_code=404, detail=str(ex)) from ex
+    return {"message": "Department deleted."}
 
 
 # ==========================================================
