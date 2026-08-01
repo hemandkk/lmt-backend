@@ -4,6 +4,8 @@ from typing import Optional
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from app.schemas.employee import EmployeeBranchItem
+
 
 def _alias_config() -> ConfigDict:
     return ConfigDict(
@@ -311,12 +313,18 @@ class EmployeeSalesTargetItem(BaseModel):
         default=None, serialization_alias="employeeCode"
     )
     employee_name: str = Field(serialization_alias="employeeName")
+    role: str
     assigned_target: Optional[Decimal] = Field(
         default=None, serialization_alias="assignedTarget"
     )
     effective_target: Decimal = Field(serialization_alias="effectiveTarget")
     target_assigned: bool = Field(serialization_alias="targetAssigned")
     target_source: str = Field(serialization_alias="targetSource")  # assigned | default
+    state_name: Optional[str] = Field(default=None, serialization_alias="stateName")
+    branch_name: Optional[str] = Field(
+        default=None, serialization_alias="branchName"
+    )
+    branches: list[EmployeeBranchItem] = Field(default_factory=list)
 
 
 class SalesTargetOverviewResponse(BaseModel):

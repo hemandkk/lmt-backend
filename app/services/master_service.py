@@ -46,6 +46,7 @@ from app.schemas.master import (
     StateUpdate,
     UpdateIncentiveSlabsRequest,
 )
+from app.schemas.employee import EmployeeBranchItem
 from app.services.master_import import (
     map_course_row,
     map_specialization_row,
@@ -665,11 +666,32 @@ class MasterService:
     # --------------------------------------------------
 
     @staticmethod
+    def _employee_branch_items(user: User) -> list[EmployeeBranchItem]:
+        assigned_branches = list(getattr(user, "assigned_branches", None) or [])
+        branch = getattr(user, "branch", None)
+        if not assigned_branches and branch is not None:
+            assigned_branches = [branch]
+        return [
+            EmployeeBranchItem(
+                id=b.id,
+                name=b.name,
+                branch_code=b.branch_code,
+                state_id=b.state_id,
+            )
+            for b in assigned_branches
+        ]
+
+    @staticmethod
     def get_sales_target_overview(db: Session) -> SalesTargetOverviewResponse:
         default_target = SettingsRepository.get_default_monthly_sales_target(db)
         employees = (
             db.query(User)
-            .filter(User.role == UserRole.employee, User.is_active.is_(True))
+            .filter(
+                User.role.in_(
+                    [UserRole.sales_head, UserRole.manager, UserRole.employee]
+                ),
+                User.is_active.is_(True),
+            )
             .order_by(User.name.asc())
             .all()
         )
@@ -683,6 +705,7 @@ class MasterService:
                     employee_id=user.id,
                     employee_code=user.employee_id,
                     employee_name=user.name or "Unknown",
+                    role=user.role.value if hasattr(user.role, "value") else str(user.role),
                     assigned_target=(
                         Decimal(str(user.monthly_sales_target))
                         if user.monthly_sales_target is not None
@@ -691,6 +714,13 @@ class MasterService:
                     effective_target=effective,
                     target_assigned=assigned,
                     target_source=source,
+                    state_name=(
+                        user.state.name if user.state is not None else None
+                    ),
+                    branch_name=(
+                        user.branch.name if user.branch is not None else None
+                    ),
+                    branches=MasterService._employee_branch_items(user),
                 )
             )
         return SalesTargetOverviewResponse(
@@ -739,10 +769,14 @@ class MasterService:
             employee_id=user.id,
             employee_code=user.employee_id,
             employee_name=user.name or "Unknown",
+            role=user.role.value if hasattr(user.role, "value") else str(user.role),
             assigned_target=Decimal(str(user.monthly_sales_target)),
             effective_target=effective,
             target_assigned=assigned,
             target_source=source,
+            state_name=user.state.name if user.state is not None else None,
+            branch_name=user.branch.name if user.branch is not None else None,
+            branches=MasterService._employee_branch_items(user),
         )
 
     @staticmethod
@@ -770,10 +804,14 @@ class MasterService:
             employee_id=user.id,
             employee_code=user.employee_id,
             employee_name=user.name or "Unknown",
+            role=user.role.value if hasattr(user.role, "value") else str(user.role),
             assigned_target=None,
             effective_target=effective,
             target_assigned=assigned,
             target_source=source,
+            state_name=user.state.name if user.state is not None else None,
+            branch_name=user.branch.name if user.branch is not None else None,
+            branches=MasterService._employee_branch_items(user),
         )
 
     @staticmethod
@@ -796,6 +834,7 @@ class MasterService:
             employee_id=user.id,
             employee_code=user.employee_id,
             employee_name=user.name or "Unknown",
+            role=user.role.value if hasattr(user.role, "value") else str(user.role),
             assigned_target=(
                 Decimal(str(user.monthly_sales_target))
                 if user.monthly_sales_target is not None
@@ -804,6 +843,9 @@ class MasterService:
             effective_target=effective,
             target_assigned=assigned,
             target_source=source,
+            state_name=user.state.name if user.state is not None else None,
+            branch_name=user.branch.name if user.branch is not None else None,
+            branches=MasterService._employee_branch_items(user),
         )
 
     @staticmethod
@@ -847,6 +889,7 @@ class MasterService:
                     employee_id=user.id,
                     employee_code=user.employee_id,
                     employee_name=user.name or "Unknown",
+                    role=user.role.value if hasattr(user.role, "value") else str(user.role),
                     assigned_target=(
                         Decimal(str(user.monthly_sales_target))
                         if user.monthly_sales_target is not None
@@ -855,6 +898,13 @@ class MasterService:
                     effective_target=effective,
                     target_assigned=assigned,
                     target_source=source,
+                    state_name=(
+                        user.state.name if user.state is not None else None
+                    ),
+                    branch_name=(
+                        user.branch.name if user.branch is not None else None
+                    ),
+                    branches=MasterService._employee_branch_items(user),
                 )
             )
 
