@@ -450,6 +450,11 @@ def list_prospects(
     branch_ids: str | None = Query(None, alias="branchIds", description="CSV e.g. 1,2,3"),
     created_from: date | None = Query(None, alias="createdFrom"),
     created_to: date | None = Query(None, alias="createdTo"),
+    payments_verified: str | None = Query(
+        None,
+        alias="paymentsVerified",
+        description="verified | not_verified | not_credited",
+    ),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -503,6 +508,7 @@ def list_prospects(
             course_id=course_id,
             created_from=created_from,
             created_to=created_to,
+            payments_verified=payments_verified,
         )
         # Mask completed-stage prospect data for non-admin users
         for item in result.get("items", []):
@@ -523,6 +529,11 @@ def export_prospects(
     state_id: int | None = Query(None, alias="stateId"),
     branch_id: int | None = Query(None, alias="branchId"),
     branch_ids: str | None = Query(None, alias="branchIds", description="CSV e.g. 1,2,3"),
+    payments_verified: str | None = Query(
+        None,
+        alias="paymentsVerified",
+        description="verified | not_verified | not_credited",
+    ),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -571,6 +582,7 @@ def export_prospects(
             branch_id=branch_id,
             branch_ids=branch_ids,
             course_id=course_id,
+            payments_verified=payments_verified,
             current_user=current_user,
         )
     except ValueError as ex:

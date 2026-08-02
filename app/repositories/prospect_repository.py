@@ -4,7 +4,7 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session, joinedload, selectinload
 
 from app.core.geo_scope import apply_prospect_assignee_geo
-from app.db.models.payment import Payment
+from app.db.models.payment import Payment, PaymentVerificationStatus
 from app.db.models.prospect import Prospect
 from app.db.models.user import User
 
@@ -73,6 +73,7 @@ class ProspectRepository:
         course_id: int | None = None,
         created_from=None,
         created_to=None,
+        payments_verified: str | None = None,
     ):
         query = ProspectRepository._filtered_query(
             db,
@@ -87,6 +88,7 @@ class ProspectRepository:
             course_id=course_id,
             created_from=created_from,
             created_to=created_to,
+            payments_verified=payments_verified,
         )
         total = query.count()
         items = (
@@ -109,6 +111,7 @@ class ProspectRepository:
         branch_id: int | None = None,
         branch_ids: List[int] | None = None,
         course_id: int | None = None,
+        payments_verified: str | None = None,
     ) -> List[Prospect]:
         return (
             ProspectRepository._filtered_query(
@@ -122,6 +125,7 @@ class ProspectRepository:
                 branch_id=branch_id,
                 branch_ids=branch_ids,
                 course_id=course_id,
+                payments_verified=payments_verified,
             )
             .order_by(Prospect.created_at.desc())
             .all()
@@ -141,6 +145,7 @@ class ProspectRepository:
         course_id: int | None = None,
         created_from=None,
         created_to=None,
+        payments_verified: str | None = None,
     ):
         query = db.query(Prospect).options(
             *ProspectRepository._with_relations()
@@ -184,6 +189,24 @@ class ProspectRepository:
 
         if created_to is not None:
             query = query.filter(Prospect.created_at <= created_to)
+
+        if payments_verified:
+            status = PaymentVerificationStatus(payments_verified)
+            if status == PaymentVerificationStatus.verified:
+                unverified = db.query(Payment.prospect_id).filter(
+                    Payment.verification_status
+                    != PaymentVerificationStatus.verified
+                )
+                query = query.filter(
+                    Prospect.payments.any(),
+                    ~Prospect.id.in_(unverified),
+                )
+            else:
+                query = query.filter(
+                    Prospect.payments.any(
+                        Payment.verification_status == status
+                    )
+                )
 
         return query
 

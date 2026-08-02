@@ -55,6 +55,7 @@ class ExportService:
         branch_id: int | None = None,
         branch_ids: list[int] | None = None,
         course_id: int | None = None,
+        payments_verified: str | None = None,
         current_user: User | None = None,
     ) -> StreamingResponse:
         """
@@ -76,6 +77,7 @@ class ExportService:
             state_id=state_id,
             branch_id=branch_id,
             course_id=course_id,
+            payments_verified=payments_verified,
         )
 
         from app.db.models.course import Course

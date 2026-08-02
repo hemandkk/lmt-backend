@@ -395,6 +395,7 @@ class ProspectService:
         course_id: int | None = None,
         created_from=None,
         created_to=None,
+        payments_verified: str | None = None,
     ):
         parsed_stages: list[str] | None = None
         if admission_stages:
@@ -403,6 +404,10 @@ class ProspectService:
             ]
         elif admission_stage:
             parsed_stages = [parse_admission_stage(admission_stage).value]
+
+        if payments_verified:
+            # validate early so invalid values fail with a 400
+            PaymentVerificationStatus(payments_verified)
 
         items, total = ProspectRepository.list(
             db,
@@ -418,6 +423,7 @@ class ProspectService:
             course_id=course_id,
             created_from=created_from,
             created_to=created_to,
+            payments_verified=payments_verified,
         )
         return {
             "items": items,
