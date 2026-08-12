@@ -31,22 +31,22 @@ class FileStorage:
     def _s3_configured(cls) -> bool:
         return bool(
             settings.S3_BUCKET
-            and settings.S3_ACCESS_KEY_ID
-            and settings.S3_SECRET_ACCESS_KEY
             and settings.S3_PUBLIC_BASE_URL
         )
-
+    """ and settings.S3_ACCESS_KEY_ID
+            and settings.S3_SECRET_ACCESS_KEY 
+    """
     @classmethod
     def _s3_client(cls):
         return boto3.client(
             "s3",
             endpoint_url=settings.S3_ENDPOINT_URL or None,
-            aws_access_key_id=settings.S3_ACCESS_KEY_ID,
-            aws_secret_access_key=settings.S3_SECRET_ACCESS_KEY,
             region_name=settings.S3_REGION or "auto",
             config=Config(signature_version="s3v4"),
         )
-
+    """ aws_access_key_id=settings.S3_ACCESS_KEY_ID,
+        aws_secret_access_key=settings.S3_SECRET_ACCESS_KEY, 
+    """
     @classmethod
     def _public_base(cls) -> str:
         return (settings.S3_PUBLIC_BASE_URL or "").rstrip("/")
