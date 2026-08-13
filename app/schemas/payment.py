@@ -1,5 +1,5 @@
 from __future__ import annotations
-
+from app.core.file_storage import FileStorage
 from datetime import date, datetime
 from decimal import Decimal
 from typing import Any, Optional
@@ -156,6 +156,12 @@ class ReceiptUploadResponse(BaseModel):
     model_config = _alias_config()
 
     receipt_url: str = Field(..., alias="receiptUrl")
+    @field_validator("receipt_url", "invoice_url", mode="after")
+    @classmethod
+    def convert_expense_urls(cls, v: Optional[str]) -> Optional[str]:
+        if not v:
+            return v
+        return FileStorage.get_view_url(v)
 
 
 class PaymentVerificationUpdate(BaseModel):
@@ -232,7 +238,13 @@ class PaymentResponse(PaymentBase):
     created_at: datetime = Field(..., alias="createdAt")
 
     updated_at: datetime = Field(..., alias="updatedAt")
-
+    @field_validator("receipt_url", "invoice_url", mode="after")
+    @classmethod
+    def convert_expense_urls(cls, v: Optional[str]) -> Optional[str]:
+        if not v:
+            return v
+        return FileStorage.get_view_url(v)
+    
     @model_validator(mode="wrap")
     @classmethod
     def pull_verifier_fields(cls, data: Any, handler):

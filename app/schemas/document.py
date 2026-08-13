@@ -4,8 +4,10 @@ from typing import Optional
 from pydantic import (
     BaseModel,
     ConfigDict,
+    field_validator,
 )
 
+from app.core.file_storage import FileStorage
 from app.db.models.prospect_document import (
     DocumentType,
 )
@@ -72,6 +74,13 @@ class DocumentResponse(BaseModel):
     model_config = ConfigDict(
         from_attributes=True
     )
+        # 💡 ADD THIS VALIDATOR BLOCK:
+    @field_validator("file_url", mode="after")
+    @classmethod
+    def convert_to_presigned_url(cls, v: str) -> str:
+        if not v:
+            return v
+        return FileStorage.get_view_url(v)
 
 
 # ---------------------------------------------------------

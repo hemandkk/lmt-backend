@@ -2,6 +2,7 @@ from datetime import date, datetime
 from decimal import Decimal
 from typing import Any, Optional
 import json
+from app.core.file_storage import FileStorage
 
 from pydantic import (
     BaseModel,
@@ -60,7 +61,12 @@ class LeadPaymentInput(BaseModel):
     reference_number: Optional[str] = Field(
         default=None, alias="referenceNumber"
     )
-
+    @field_validator("receipt_url", mode="after")
+    @classmethod
+    def convert_prospect_receipt_urls(cls, v: Optional[str]) -> Optional[str]:
+        if not v:
+            return v
+        return FileStorage.get_view_url(v)
     @field_validator("payment_type", mode="before")
     @classmethod
     def map_payment_type_aliases(cls, value: Any) -> Any:
@@ -106,6 +112,12 @@ class PaymentResponse(BaseModel):
     verified_by_name: Optional[str] = Field(
         default=None, serialization_alias="verifiedByName"
     )
+    @field_validator("receipt_url", mode="after")
+    @classmethod
+    def convert_prospect_receipt_urls(cls, v: Optional[str]) -> Optional[str]:
+        if not v:
+            return v
+        return FileStorage.get_view_url(v)
 
     @model_validator(mode="wrap")
     @classmethod

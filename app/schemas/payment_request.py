@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import date, datetime
 from decimal import Decimal
 from typing import Any, Optional
-
+from app.core.file_storage import FileStorage
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.db.models.payment_request import PaymentRequestStatus,ExpenseCategory
@@ -219,6 +219,13 @@ class PaymentRequestResponse(BaseModel):
     created_at: datetime = Field(..., alias="createdAt", serialization_alias="createdAt")
     updated_at: datetime = Field(..., alias="updatedAt", serialization_alias="updatedAt")
 
+    @field_validator("receipt_url", mode="after")
+    @classmethod
+    def convert_payment_request_urls(cls, v: Optional[str]) -> Optional[str]:
+        if not v:
+            return v
+        return FileStorage.get_view_url(v)
+    
     @field_validator("status", mode="before")
     @classmethod
     def coerce_status(cls, value: Any):

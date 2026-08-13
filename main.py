@@ -1,4 +1,5 @@
 from pathlib import Path
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
@@ -29,16 +30,14 @@ from app.repositories.settings_repository import (
     SettingsRepository,
 )
 
+# Setup directories
 UPLOAD_DIR = Path("app/uploads")
 UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
-
-Base.metadata.create_all(bind=engine)
 
 
 def ensure_schema_updates() -> None:
     """
-    create_all() does not ADD columns to existing tables.
-    Apply safe, idempotent column/index patches here.
+    Applies safe, idempotent column/index patches.
     """
     with engine.begin() as conn:
         inspector = inspect(conn)
@@ -46,304 +45,94 @@ def ensure_schema_updates() -> None:
 
         if "prospects" in tables:
             existing = {col["name"] for col in inspector.get_columns("prospects")}
-
             if "source" not in existing:
-                conn.execute(
-                    text("ALTER TABLE prospects ADD COLUMN source VARCHAR(100)")
-                )
-                conn.execute(
-                    text(
-                        "CREATE INDEX IF NOT EXISTS ix_prospects_source "
-                        "ON prospects (source)"
-                    )
-                )
-
+                conn.execute(text("ALTER TABLE prospects ADD COLUMN source VARCHAR(100)"))
+                conn.execute(text("CREATE INDEX IF NOT EXISTS ix_prospects_source ON prospects (source)"))
             if "follow_up_date" not in existing:
-                conn.execute(
-                    text("ALTER TABLE prospects ADD COLUMN follow_up_date DATE")
-                )
-                conn.execute(
-                    text(
-                        "CREATE INDEX IF NOT EXISTS ix_prospects_follow_up_date "
-                        "ON prospects (follow_up_date)"
-                    )
-                )
-
+                conn.execute(text("ALTER TABLE prospects ADD COLUMN follow_up_date DATE"))
+                conn.execute(text("CREATE INDEX IF NOT EXISTS ix_prospects_follow_up_date ON prospects (follow_up_date)"))
             if "created_by_id" not in existing:
-                conn.execute(
-                    text(
-                        "ALTER TABLE prospects "
-                        "ADD COLUMN created_by_id INTEGER "
-                        "REFERENCES users(id)"
-                    )
-                )
+                conn.execute(text("ALTER TABLE prospects ADD COLUMN created_by_id INTEGER REFERENCES users(id)"))
             if "updated_by_id" not in existing:
-                conn.execute(
-                    text(
-                        "ALTER TABLE prospects "
-                        "ADD COLUMN updated_by_id INTEGER "
-                        "REFERENCES users(id)"
-                    )
-                )
-
+                conn.execute(text("ALTER TABLE prospects ADD COLUMN updated_by_id INTEGER REFERENCES users(id)"))
             if "admission_stage" not in existing:
-                conn.execute(
-                    text(
-                        "ALTER TABLE prospects "
-                        "ADD COLUMN admission_stage VARCHAR(50) "
-                        "NOT NULL DEFAULT 'registered'"
-                    )
-                )
-                conn.execute(
-                    text(
-                        "CREATE INDEX IF NOT EXISTS "
-                        "ix_prospects_admission_stage "
-                        "ON prospects (admission_stage)"
-                    )
-                )
+                conn.execute(text("ALTER TABLE prospects ADD COLUMN admission_stage VARCHAR(50) NOT NULL DEFAULT 'registered'"))
+                conn.execute(text("CREATE INDEX IF NOT EXISTS ix_prospects_admission_stage ON prospects (admission_stage)"))
 
         if "users" in tables:
             user_cols = {col["name"] for col in inspector.get_columns("users")}
             if "monthly_sales_target" not in user_cols:
-                # NULL = not assigned → master default applies
-                conn.execute(
-                    text(
-                        "ALTER TABLE users "
-                        "ADD COLUMN monthly_sales_target NUMERIC(12, 2) "
-                        "DEFAULT NULL"
-                    )
-                )
+                conn.execute(text("ALTER TABLE users ADD COLUMN monthly_sales_target NUMERIC(12, 2) DEFAULT NULL"))
             else:
-                # Drop server default so new employees inherit master default
                 try:
-                    conn.execute(
-                        text(
-                            "ALTER TABLE users "
-                            "ALTER COLUMN monthly_sales_target DROP DEFAULT"
-                        )
-                    )
+                    conn.execute(text("ALTER TABLE users ALTER COLUMN monthly_sales_target DROP DEFAULT"))
                 except Exception:
                     pass
 
             if "phone" not in user_cols:
-                conn.execute(
-                    text("ALTER TABLE users ADD COLUMN phone VARCHAR(30)")
-                )
+                conn.execute(text("ALTER TABLE users ADD COLUMN phone VARCHAR(30)"))
             if "department" not in user_cols:
-                conn.execute(
-                    text(
-                        "ALTER TABLE users ADD COLUMN department VARCHAR(100)"
-                    )
-                )
+                conn.execute(text("ALTER TABLE users ADD COLUMN department VARCHAR(100)"))
             if "designation" not in user_cols:
-                conn.execute(
-                    text(
-                        "ALTER TABLE users ADD COLUMN designation VARCHAR(100)"
-                    )
-                )
+                conn.execute(text("ALTER TABLE users ADD COLUMN designation VARCHAR(100)"))
 
-            # Extend PostgreSQL userrole enum for staff roles
-            for role_value in (
-                "accountant",
-                "processing_team",
-                "manager",
-                "sales_head",
-            ):
+            for role_value in ("accountant", "processing_team", "manager", "sales_head"):
                 try:
-                    conn.execute(
-                        text(
-                            f"ALTER TYPE userrole ADD VALUE IF NOT EXISTS "
-                            f"'{role_value}'"
-                        )
-                    )
+                    conn.execute(text(f"ALTER TYPE userrole ADD VALUE IF NOT EXISTS '{role_value}'"))
                 except Exception:
                     try:
-                        conn.execute(
-                            text(
-                                f"ALTER TYPE userrole ADD VALUE '{role_value}'"
-                            )
-                        )
+                        conn.execute(text(f"ALTER TYPE userrole ADD VALUE '{role_value}'"))
                     except Exception:
                         pass
 
             if "reports_to_manager_id" not in user_cols:
-                conn.execute(
-                    text(
-                        "ALTER TABLE users "
-                        "ADD COLUMN reports_to_manager_id INTEGER "
-                        "REFERENCES users(id) ON DELETE SET NULL"
-                    )
-                )
-                conn.execute(
-                    text(
-                        "CREATE INDEX IF NOT EXISTS "
-                        "ix_users_reports_to_manager_id "
-                        "ON users (reports_to_manager_id)"
-                    )
-                )
+                conn.execute(text("ALTER TABLE users ADD COLUMN reports_to_manager_id INTEGER REFERENCES users(id) ON DELETE SET NULL"))
+                conn.execute(text("CREATE INDEX IF NOT EXISTS ix_users_reports_to_manager_id ON users (reports_to_manager_id)"))
             if "reports_to_sales_head_id" not in user_cols:
-                conn.execute(
-                    text(
-                        "ALTER TABLE users "
-                        "ADD COLUMN reports_to_sales_head_id INTEGER "
-                        "REFERENCES users(id) ON DELETE SET NULL"
-                    )
-                )
-                conn.execute(
-                    text(
-                        "CREATE INDEX IF NOT EXISTS "
-                        "ix_users_reports_to_sales_head_id "
-                        "ON users (reports_to_sales_head_id)"
-                    )
-                )
+                conn.execute(text("ALTER TABLE users ADD COLUMN reports_to_sales_head_id INTEGER REFERENCES users(id) ON DELETE SET NULL"))
+                conn.execute(text("CREATE INDEX IF NOT EXISTS ix_users_reports_to_sales_head_id ON users (reports_to_sales_head_id)"))
 
         if "payments" in tables:
             pay_cols = {col["name"] for col in inspector.get_columns("payments")}
             if "verification_status" not in pay_cols:
-                conn.execute(
-                    text(
-                        "ALTER TABLE payments "
-                        "ADD COLUMN verification_status VARCHAR(30) "
-                        "NOT NULL DEFAULT 'not_verified'"
-                    )
-                )
-                conn.execute(
-                    text(
-                        "CREATE INDEX IF NOT EXISTS "
-                        "ix_payments_verification_status "
-                        "ON payments (verification_status)"
-                    )
-                )
+                conn.execute(text("ALTER TABLE payments ADD COLUMN verification_status VARCHAR(30) NOT NULL DEFAULT 'not_verified'"))
+                conn.execute(text("CREATE INDEX IF NOT EXISTS ix_payments_verification_status ON payments (verification_status)"))
             if "verified_at" not in pay_cols:
-                conn.execute(
-                    text(
-                        "ALTER TABLE payments "
-                        "ADD COLUMN verified_at TIMESTAMPTZ"
-                    )
-                )
-            if "verified_by_id" not in pay_cols:
-                conn.execute(
-                    text(
-                        "ALTER TABLE payments "
-                        "ADD COLUMN verified_by_id INTEGER "
-                        "REFERENCES users(id)"
-                    )
-                )
+                conn.execute(text("ALTER TABLE payments ADD COLUMN verified_at TIMESTAMPTZ"))
 
-        if "incentive_slabs" in tables:
-            slab_cols = {
-                col["name"] for col in inspector.get_columns("incentive_slabs")
-            }
-            had_amount_based = (
-                "min_amount" in slab_cols or "rate_percent" in slab_cols
+
+def seed_default_admin_user() -> None:
+    """
+    Seeds default admin configurations into clean DB.
+    """
+    db = SessionLocal()
+    try:
+        user = db.query(User).filter(User.email == "admin@example.com").first()
+        if user is None:
+            user = User(
+                email="admin@example.com",
+                employee_id="ADM001",
+                name="Admin User",
+                password_hash=hash_password("asdf1234"),
+                role=UserRole.admin,
+                is_active=True,
             )
-            # Migrate amount/% slabs → lead-count + fixed incentive amount
-            if "min_leads" not in slab_cols:
-                conn.execute(
-                    text(
-                        "ALTER TABLE incentive_slabs "
-                        "ADD COLUMN min_leads INTEGER"
-                    )
-                )
-            if "max_leads" not in slab_cols:
-                conn.execute(
-                    text(
-                        "ALTER TABLE incentive_slabs "
-                        "ADD COLUMN max_leads INTEGER"
-                    )
-                )
-            if "incentive_amount" not in slab_cols:
-                conn.execute(
-                    text(
-                        "ALTER TABLE incentive_slabs "
-                        "ADD COLUMN incentive_amount NUMERIC(12, 2)"
-                    )
-                )
+            db.add(user)
+            print("🚀 SEEDER: New admin user instantiated.", flush=True)
+        else:
+            user.employee_id = "ADM001"
+            user.name = "Admin User"
+            user.role = UserRole.admin
+            user.is_active = True
+            print("ℹ️ SEEDER: Admin record matched. Properties updated.", flush=True)
+        db.commit()
+        print("✅ SEEDER: Transaction successfully committed to lmt_db.", flush=True)
+    except Exception as e:
+        db.rollback()
+        print(f"❌ SEEDER CRASHED: {e}", flush=True)
+    finally:
+        db.close()
 
-            if had_amount_based:
-                # Old amount-based rows are meaningless under the new scheme
-                conn.execute(text("DELETE FROM incentive_slabs"))
-                for old_col in ("min_amount", "max_amount", "rate_percent"):
-                    if old_col in slab_cols:
-                        conn.execute(
-                            text(
-                                f"ALTER TABLE incentive_slabs "
-                                f"DROP COLUMN IF EXISTS {old_col}"
-                            )
-                        )
-
-            conn.execute(
-                text(
-                    "UPDATE incentive_slabs "
-                    "SET min_leads = 0 "
-                    "WHERE min_leads IS NULL"
-                )
-            )
-            conn.execute(
-                text(
-                    "UPDATE incentive_slabs "
-                    "SET incentive_amount = 0 "
-                    "WHERE incentive_amount IS NULL"
-                )
-            )
-            try:
-                conn.execute(
-                    text(
-                        "ALTER TABLE incentive_slabs "
-                        "ALTER COLUMN min_leads SET NOT NULL"
-                    )
-                )
-                conn.execute(
-                    text(
-                        "ALTER TABLE incentive_slabs "
-                        "ALTER COLUMN incentive_amount SET NOT NULL"
-                    )
-                )
-            except Exception:
-                pass
-
-        # --- Incentive payment type columns ---
-        if "payment_requests" in tables:
-            pr_cols = {col["name"] for col in inspector.get_columns("payment_requests")}
-            if "payment_type" not in pr_cols:
-                conn.execute(text(
-                    "ALTER TABLE payment_requests "
-                    "ADD COLUMN payment_type VARCHAR(20) NOT NULL DEFAULT 'rent'"
-                ))
-                conn.execute(text(
-                    "CREATE INDEX IF NOT EXISTS ix_payment_requests_payment_type "
-                    "ON payment_requests (payment_type)"
-                ))
-            if "employee_id" not in pr_cols:
-                conn.execute(text(
-                    "ALTER TABLE payment_requests "
-                    "ADD COLUMN employee_id INTEGER REFERENCES users(id) ON DELETE SET NULL"
-                ))
-                conn.execute(text(
-                    "CREATE INDEX IF NOT EXISTS ix_payment_requests_employee_id "
-                    "ON payment_requests (employee_id)"
-                ))
-
-        if "expenses" in tables:
-            exp_cols = {col["name"] for col in inspector.get_columns("expenses")}
-            if "expense_type" not in exp_cols:
-                conn.execute(text(
-                    "ALTER TABLE expenses "
-                    "ADD COLUMN expense_type VARCHAR(20) NOT NULL DEFAULT 'rent'"
-                ))
-                conn.execute(text(
-                    "CREATE INDEX IF NOT EXISTS ix_expenses_expense_type "
-                    "ON expenses (expense_type)"
-                ))
-            if "employee_id" not in exp_cols:
-                conn.execute(text(
-                    "ALTER TABLE expenses "
-                    "ADD COLUMN employee_id INTEGER REFERENCES users(id) ON DELETE SET NULL"
-                ))
-                conn.execute(text(
-                    "CREATE INDEX IF NOT EXISTS ix_expenses_employee_id "
-                    "ON expenses (employee_id)"
-                ))
 
 
 def seed_default_incentive_slabs() -> None:
@@ -386,67 +175,46 @@ def seed_default_sales_target() -> None:
     finally:
         db.close()
 
+# 💡 MODERN LIFESPAN LIFECYCLE HANDLER
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    print("⏳ STARTUP: Initializing application tables and rules...", flush=True)
+    
+    # 1. Safely handle table generation
+    Base.metadata.create_all(bind=engine)
+    
+    # 2. Run manual patch migrations
+    ensure_schema_updates()
+    
+    # 3. Seed your data completely
+    seed_default_admin_user()
+    seed_default_incentive_slabs()
+    seed_default_sales_target()
+    
+    yield
+    print("🛑 SHUTTING DOWN: Closing app hooks...", flush=True)
 
-ensure_schema_updates()
-seed_default_incentive_slabs()
-seed_default_sales_target()
 
-app = FastAPI(
-    title="LMT API",
-    version="1.0.0"
-)
+# Initialize FastAPI with modern Lifespan hook
+app = FastAPI(lifespan=lifespan)
 
-""" origins = [
-    "http://localhost:3000",
-     "https://crm-lm-frontend-9tny06osm-testercrm94-8474s-projects.vercel.app",
-] """
 origins = [
     origin.strip()
     for origin in settings.CORS_ORIGINS.split(",")
     if origin.strip()
 ]
-
+# Add CORS Middleware configurations
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=origins,
+    allow_origins=[origins],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-app.include_router(
-    api_router,
-    prefix="/api/v1"
-)
-
-app.include_router(payment_router)
-
-
-@app.on_event("startup")
-def seed_default_admin_user():
-    db = SessionLocal()
-    try:
-        user = db.query(User).filter(User.email == "admin@example.com").first()
-        if user is None:
-            user = User(
-                email="admin@example.com",
-                employee_id="ADM001",
-                name="Admin User",
-                password_hash=hash_password("asdf1234"),
-                role=UserRole.admin,
-                is_active=True,
-            )
-            db.add(user)
-        else:
-            # Keep existing password — do not reset on every restart
-            user.employee_id = "ADM001"
-            user.name = "Admin User"
-            user.role = UserRole.admin
-            user.is_active = True
-        db.commit()
-    finally:
-        db.close()
-
+# Route Mounting
+app.include_router(api_router, prefix=settings.API_V1_STR)
+app.include_router(payment_router, prefix=f"{settings.API_V1_STR}/payments", tags=["payments"])
 
 app.mount(
     "/uploads",

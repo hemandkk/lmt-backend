@@ -4,10 +4,10 @@ from datetime import date, datetime
 from decimal import Decimal
 from typing import Optional
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from app.db.models.payment_request import ExpenseCategory
-
+from app.core.file_storage import FileStorage
 
 def _alias_config() -> ConfigDict:
     return ConfigDict(
@@ -153,6 +153,13 @@ class ExpenseResponse(ExpenseBase):
     )
     created_at: datetime = Field(..., alias="createdAt", serialization_alias="createdAt")
     updated_at: datetime = Field(..., alias="updatedAt", serialization_alias="updatedAt")
+
+    @field_validator("receipt_url", "invoice_url", mode="after")
+    @classmethod
+    def convert_expense_urls(cls, v: Optional[str]) -> Optional[str]:
+        if not v:
+            return v
+        return FileStorage.get_view_url(v)
 
 
 class ExpenseListResponse(BaseModel):
