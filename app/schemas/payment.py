@@ -156,7 +156,7 @@ class ReceiptUploadResponse(BaseModel):
     model_config = _alias_config()
 
     receipt_url: str = Field(..., alias="receiptUrl")
-    @field_validator("receipt_url", "invoice_url", mode="after")
+    @field_validator("receipt_url", mode="after")
     @classmethod
     def convert_expense_urls(cls, v: Optional[str]) -> Optional[str]:
         if not v:
@@ -238,7 +238,7 @@ class PaymentResponse(PaymentBase):
     created_at: datetime = Field(..., alias="createdAt")
 
     updated_at: datetime = Field(..., alias="updatedAt")
-    @field_validator("receipt_url", "invoice_url", mode="after")
+    @field_validator("receipt_url", mode="after")
     @classmethod
     def convert_expense_urls(cls, v: Optional[str]) -> Optional[str]:
         if not v:

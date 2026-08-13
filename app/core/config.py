@@ -26,6 +26,7 @@ class Settings(BaseSettings):
 
     # File storage: "local" (disk + /uploads) or "s3" (S3/R2)
     STORAGE_BACKEND: str = Field(default="local")
+    API_V1_STR: str = "/api/v1" # 💡 Hardcoding the fallback here ensures it never crashes
     S3_BUCKET: str | None = Field(default=None)
     S3_REGION: str = Field(default="auto")
     S3_ENDPOINT_URL: str | None = Field(default=None)
