@@ -29,27 +29,17 @@ class FileStorage:
 
     @classmethod
     def _s3_configured(cls) -> bool:
-        return bool(
-            settings.S3_BUCKET
-            and settings.S3_PUBLIC_BASE_URL
-        )
-    """ and settings.S3_ACCESS_KEY_ID
-            and settings.S3_SECRET_ACCESS_KEY 
-    """
+        return bool(settings.S3_BUCKET)
+
     @classmethod
     def _s3_client(cls):
+        # Crucial: signature_version='s3v4' is required for presigned secure URLs
         return boto3.client(
             "s3",
             endpoint_url=settings.S3_ENDPOINT_URL or None,
-            region_name=settings.S3_REGION or "auto",
+            region_name=settings.S3_REGION or "us-east-1",
             config=Config(signature_version="s3v4"),
         )
-    """ aws_access_key_id=settings.S3_ACCESS_KEY_ID,
-        aws_secret_access_key=settings.S3_SECRET_ACCESS_KEY, 
-    """
-    @classmethod
-    def _public_base(cls) -> str:
-        return (settings.S3_PUBLIC_BASE_URL or "").rstrip("/")
 
     @classmethod
     def _object_key(cls, folder: str, stored_filename: str) -> str:
@@ -57,67 +47,52 @@ class FileStorage:
 
     @classmethod
     def _key_from_url(cls, file_url: str) -> str | None:
-        """Derive storage object key from a stored file_url."""
+        """Derive pure object key from saved file references."""
         if not file_url:
             return None
-
         url = file_url.strip()
-        public_base = cls._public_base()
 
-        if public_base and url.startswith(public_base):
-            return url[len(public_base) :].lstrip("/")
-
+        # Handle structural cleaning if path contains prefix metadata
+        if url.startswith("s3://"):
+            return url.replace(f"s3://{settings.S3_BUCKET}/", "")
         if url.startswith(cls.PUBLIC_PREFIX):
             return url[len(cls.PUBLIC_PREFIX) :].lstrip("/")
-
         if url.startswith("http://") or url.startswith("https://"):
-            path = urlparse(url).path.lstrip("/")
-            if path.startswith("uploads/"):
-                return path[len("uploads/") :]
-            return path or None
+            return urlparse(url).path.lstrip("/")
+        
+        return url
 
-        # Legacy local path like app/uploads/...
-        marker = "uploads/"
-        if marker in url.replace("\\", "/"):
-            normalized = url.replace("\\", "/")
-            return normalized.split(marker, 1)[1].lstrip("/")
-
-        return None
-
+    # 💡 NEW KEY METHOD: Dynamically generates safe transient paths
     @classmethod
-    def _delete_s3_object(cls, key: str) -> None:
-        if not key or not cls._s3_configured():
-            return
-        try:
-            cls._s3_client().delete_object(Bucket=settings.S3_BUCKET, Key=key)
-            logger.info("Deleted S3 object key=%s", key)
-        except ClientError as exc:
-            # Missing object is fine — already gone / never uploaded.
-            code = exc.response.get("Error", {}).get("Code", "")
-            if code in {"404", "NoSuchKey", "NotFound"}:
-                logger.info("S3 object already absent key=%s", key)
-                return
-            logger.warning("Failed to delete S3 object key=%s: %s", key, exc)
+    def get_view_url(cls, stored_path_or_url: str) -> str:
+        """
+        Converts internal file key into a secure runtime asset link.
+        Local: returns fallback path string.
+        S3 Private: generates a secure temporary token link that expires in 15 mins.
+        """
+        if not stored_path_or_url:
+            return ""
 
-    @classmethod
-    def _delete_local_file(cls, file_url: str) -> None:
-        if not file_url:
-            return
+        if cls._use_s3():
+            key = cls._key_from_url(stored_path_or_url)
+            try:
+                # Ask AWS to securely sign a temporary token for the private object
+                presigned_url = cls._s3_client().generate_presigned_url(
+                    'get_object',
+                    Params={'Bucket': settings.S3_BUCKET, 'Key': key},
+                    ExpiresIn=900 # 15 minutes expiration safety limit
+                )
+                return presigned_url
+            except Exception as e:
+                logger.error("Failed to generate presigned S3 view link: %s", e)
+                return ""
 
-        relative = file_url
-        if relative.startswith(cls.PUBLIC_PREFIX):
-            relative = relative[len(cls.PUBLIC_PREFIX) :].lstrip("/")
-            file_path = cls.BASE_UPLOAD_DIR / relative
-        elif relative.startswith("http://") or relative.startswith("https://"):
-            key = cls._key_from_url(relative)
-            if not key:
-                return
-            file_path = cls.BASE_UPLOAD_DIR / key
-        else:
-            file_path = Path(file_url)
-
-        if file_path.exists() and file_path.is_file():
-            file_path.unlink()
+        # Local fallback execution
+        if stored_path_or_url.startswith("http"):
+            return stored_path_or_url
+        if stored_path_or_url.startswith(cls.PUBLIC_PREFIX):
+            return stored_path_or_url
+        return f"{cls.PUBLIC_PREFIX}/{stored_path_or_url.lstrip('/')}"
 
     @classmethod
     def save_file(
@@ -126,11 +101,6 @@ class FileStorage:
         folder: str,
         filename: str,
     ) -> tuple[str, str, int]:
-        """
-        Returns (public_file_url, stored_filename, file_size).
-        Local: served via StaticFiles at /uploads.
-        S3/R2: absolute public URL under S3_PUBLIC_BASE_URL.
-        """
         extension = Path(upload_file.filename or "").suffix
         stored_filename = f"{filename}{extension}"
         key = cls._object_key(folder, stored_filename)
@@ -138,11 +108,6 @@ class FileStorage:
         upload_file.file.seek(0)
 
         if cls._use_s3():
-            if not cls._s3_configured():
-                raise RuntimeError(
-                    "STORAGE_BACKEND=s3 but S3_BUCKET / keys / "
-                    "S3_PUBLIC_BASE_URL are not fully configured."
-                )
             body = upload_file.file.read()
             cls._s3_client().put_object(
                 Bucket=settings.S3_BUCKET,
@@ -150,8 +115,8 @@ class FileStorage:
                 Body=body,
                 ContentType=upload_file.content_type or "application/octet-stream",
             )
-            file_url = f"{cls._public_base()}/{key}"
-            return file_url, stored_filename, len(body)
+            # 💡 Save only the clean storage key paths to DB rather than hardcoded URLs
+            return key, stored_filename, len(body)
 
         upload_folder = cls.BASE_UPLOAD_DIR / folder
         cls.create_directory(upload_folder)
@@ -165,33 +130,26 @@ class FileStorage:
 
     @classmethod
     def delete_file(cls, file_url: str) -> None:
-        """Remove the file from object storage and/or local disk."""
         if not file_url:
             return
-
         key = cls._key_from_url(file_url)
-
-        # Always free remote storage when we can resolve a key and S3 is configured
-        # (covers s3-mode URLs, replace_file, and deletes after switching backends).
-        if key and (
-            cls._use_s3()
-            or (
-                settings.S3_PUBLIC_BASE_URL
-                and file_url.startswith(cls._public_base())
-            )
-        ):
-            cls._delete_s3_object(key)
-
+        if key and cls._use_s3():
+            try:
+                cls._s3_client().delete_object(Bucket=settings.S3_BUCKET, Key=key)
+            except Exception as e:
+                logger.warning("Failed to delete private object: %s", e)
         cls._delete_local_file(file_url)
 
     @classmethod
-    def replace_file(
-        cls,
-        old_file: str,
-        upload_file: UploadFile,
-        folder: str,
-        filename: str,
-    ):
-        # Delete old object first so storage is freed even if the new key differs.
+    def _delete_local_file(cls, file_url: str) -> None:
+        key = cls._key_from_url(file_url)
+        if not key:
+            return
+        file_path = cls.BASE_UPLOAD_DIR / key
+        if file_path.exists() and file_path.is_file():
+            file_path.unlink()
+
+    @classmethod
+    def replace_file(cls, old_file: str, upload_file: UploadFile, folder: str, filename: str):
         cls.delete_file(old_file)
         return cls.save_file(upload_file, folder, filename)
